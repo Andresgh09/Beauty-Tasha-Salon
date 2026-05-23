@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Sun, CloudSun, Moon, Calendar as CalendarIco
 import { addDays, format, isSameDay, startOfWeek, isToday } from "date-fns";
 import { es } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
-import { cn, formatCRC } from "@/lib/utils";
+import { cn, formatCRC, formatSalonTime } from "@/lib/utils";
 import type { Service } from "@/lib/supabase/types";
 
 type Slot = {
@@ -215,7 +215,7 @@ export function DateTimeStep({
             {timeISO && (
               <div className="flex items-center gap-2">
                 <Clock className="w-3.5 h-3.5" />
-                <span>{format(new Date(timeISO), "h:mm a")}</span>
+                <span>{formatSalonTime(timeISO)}</span>
               </div>
             )}
           </div>

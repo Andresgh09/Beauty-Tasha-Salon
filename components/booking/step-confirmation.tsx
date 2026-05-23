@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
 import { CheckCircle2, Calendar, Clock, User, Phone, Mail, FileText, AlertCircle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatCRC } from "@/lib/utils";
+import {
+  formatCRC,
+  formatSalonTime,
+  formatSalonDateLong,
+  formatSalonDateTimeFull
+} from "@/lib/utils";
 import type { BookingState } from "./booking";
 
 type SubmitState =
@@ -66,10 +69,7 @@ export function ConfirmationStep({
         <p className="text-sm text-charcoal-muted mb-8">
           Te esperamos el{" "}
           <span className="font-medium text-charcoal capitalize">
-            {state.timeISO &&
-              format(new Date(state.timeISO), "EEEE d 'de' MMMM 'a las' h:mm a", {
-                locale: es
-              })}
+            {state.timeISO && formatSalonDateTimeFull(state.timeISO)}
           </span>
         </p>
         <Button onClick={onReset} variant="outline">
@@ -108,13 +108,11 @@ export function ConfirmationStep({
         <div className="space-y-3 text-sm pt-4 border-t border-mauve-200">
           <Row icon={Calendar} label="Fecha">
             <span className="capitalize">
-              {format(new Date(state.timeISO), "EEEE d 'de' MMMM yyyy", {
-                locale: es
-              })}
+              {formatSalonDateLong(state.timeISO)}
             </span>
           </Row>
           <Row icon={Clock} label="Hora">
-            {format(new Date(state.timeISO), "h:mm a")} ·{" "}
+            {formatSalonTime(state.timeISO)} ·{" "}
             {state.service.duration_minutes} min
           </Row>
           <Row icon={User} label="Nombre">
