@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { cancelBooking as cancelGoogleEvent } from "@/lib/google-calendar";
 import type { Booking, BookingStatus } from "@/lib/supabase/types";
 
 async function requireAuth() {
@@ -75,8 +76,34 @@ export async function updateBooking(
   const parsed = UpdateBookingSchema.safeParse(patch);
   if (!parsed.success) return { error: "Datos inválidos" };
   const supabase = await requireAuth();
+
+  // Si estamos cancelando, leemos el google_event_id ANTES del update
+  // para poder cancelar el evento en Google Calendar después.
+  let googleEventIdToCancel: string | null = null;
+  if (parsed.data.status === "cancelled") {
+    const { data: current } = await supabase
+      .from("bookings")
+      .select("google_event_id, status")
+      .eq("id", id)
+      .single();
+    // Solo cancelar GCal si no estaba ya cancelada (evitar dobles cancelaciones)
+    if (current && current.status !== "cancelled") {
+      googleEventIdToCancel = current.google_event_id;
+    }
+  }
+
   const { error } = await supabase.from("bookings").update(parsed.data).eq("id", id);
   if (error) return { error: error.message };
+
+  // Cancelar evento en Google Calendar (no bloquear si falla)
+  if (googleEventIdToCancel) {
+    try {
+      await cancelGoogleEvent(googleEventIdToCancel);
+    } catch (gErr) {
+      console.warn("[updateBooking:gcal-cancel] No se pudo cancelar evento:", gErr);
+    }
+  }
+
   revalidatePath("/admin/citas");
   revalidatePath("/admin");
   return { ok: true };
@@ -84,8 +111,27 @@ export async function updateBooking(
 
 export async function deleteBooking(id: string) {
   const supabase = await requireAuth();
+
+  // Leemos el google_event_id ANTES de borrar para limpiar GCal
+  const { data: current } = await supabase
+    .from("bookings")
+    .select("google_event_id")
+    .eq("id", id)
+    .single();
+  const googleEventIdToCancel = current?.google_event_id ?? null;
+
   const { error } = await supabase.from("bookings").delete().eq("id", id);
   if (error) return { error: error.message };
+
+  // Cancelar evento en Google Calendar (no bloquear si falla)
+  if (googleEventIdToCancel) {
+    try {
+      await cancelGoogleEvent(googleEventIdToCancel);
+    } catch (gErr) {
+      console.warn("[deleteBooking:gcal-cancel] No se pudo cancelar evento:", gErr);
+    }
+  }
+
   revalidatePath("/admin/citas");
   revalidatePath("/admin");
   return { ok: true };
