@@ -9,6 +9,9 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const dateStr = searchParams.get("date");
     const serviceId = searchParams.get("service");
+    // Multi-servicio: el cliente pasa la suma de duraciones para validar
+    // disponibilidad de un bloque continuo del tamaño correcto
+    const durationOverrideStr = searchParams.get("durationOverride");
 
     if (!dateStr || !serviceId) {
       return NextResponse.json(
@@ -33,7 +36,18 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ slots: [] });
     }
 
-    const slots = await getPublicAvailableSlots(date, service.duration_minutes);
+    // Si recibimos durationOverride, lo usamos (caso multi-servicio).
+    // Mínimo defendido: si es inválido o menor a service.duration_minutes,
+    // caemos al default del servicio.
+    let duration = service.duration_minutes;
+    if (durationOverrideStr) {
+      const parsed = parseInt(durationOverrideStr, 10);
+      if (!isNaN(parsed) && parsed >= service.duration_minutes && parsed <= 600) {
+        duration = parsed;
+      }
+    }
+
+    const slots = await getPublicAvailableSlots(date, duration);
     return NextResponse.json({ slots });
   } catch (error) {
     console.error("[availability]", error);

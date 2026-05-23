@@ -7,20 +7,28 @@ import { createAdminClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-const BookingSchema = z.object({
-  serviceId: z.string().min(1),
-  startISO: z.string().datetime(),
-  customer: z.object({
-    name: z.string().min(2, "Nombre demasiado corto").max(80),
-    phone: z
-      .string()
-      .min(8, "Teléfono inválido")
-      .max(20)
-      .regex(/^[+\d\s\-()]+$/, "Solo números y símbolos de teléfono"),
-    email: z.string().email("Email inválido"),
-    notes: z.string().max(500).optional()
+const BookingSchema = z
+  .object({
+    // Multi-servicio: aceptamos array de IDs (preferido)
+    // Backwards-compat: si llega serviceId solo, lo normalizamos a array
+    serviceIds: z.array(z.string().min(1)).min(1).max(5).optional(),
+    serviceId: z.string().min(1).optional(),
+    startISO: z.string().datetime(),
+    customer: z.object({
+      name: z.string().min(2, "Nombre demasiado corto").max(80),
+      phone: z
+        .string()
+        .min(8, "Teléfono inválido")
+        .max(20)
+        .regex(/^[+\d\s\-()]+$/, "Solo números y símbolos de teléfono"),
+      email: z.string().email("Email inválido"),
+      notes: z.string().max(500).optional()
+    })
   })
-});
+  .refine((d) => d.serviceIds || d.serviceId, {
+    message: "Debe enviar al menos un servicio",
+    path: ["serviceIds"]
+  });
 
 // Naive in-memory rate limit (reemplazar con Upstash en prod si necesario).
 const rateLimitMap = new Map<string, { count: number; reset: number }>();
@@ -106,15 +114,31 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { serviceId, startISO, customer } = parsed.data;
-    const service = await getServiceById(serviceId);
+    const { startISO, customer } = parsed.data;
 
-    if (!service) {
+    // Normalizamos: si llega serviceId (legacy), lo convertimos a array
+    const serviceIds = parsed.data.serviceIds ?? [parsed.data.serviceId!];
+
+    // Validamos que TODOS los servicios existan y son visibles
+    const services = await Promise.all(serviceIds.map((id) => getServiceById(id)));
+    if (services.some((s) => !s)) {
       return NextResponse.json(
-        { error: "Servicio no encontrado" },
+        { error: "Uno o más servicios no existen" },
         { status: 404 }
       );
     }
+    // TS: descartamos null tras la verificación
+    const validServices = services as NonNullable<(typeof services)[number]>[];
+
+    // Duración total y precio total
+    const totalDuration = validServices.reduce(
+      (sum, s) => sum + s.duration_minutes,
+      0
+    );
+    const totalPrice = validServices.reduce((sum, s) => sum + s.price, 0);
+
+    // Servicio "primario" (primero) — para snapshot en columnas existentes
+    const primaryService = validServices[0];
 
     if (new Date(startISO) < new Date()) {
       return NextResponse.json(
@@ -133,7 +157,7 @@ export async function POST(req: NextRequest) {
     dateOnly.setHours(0, 0, 0, 0);
     const availableSlots = await getPublicAvailableSlots(
       dateOnly,
-      service.duration_minutes
+      totalDuration
     );
     const matchingSlot = availableSlots.find((s) => s.iso === startISO);
     if (!matchingSlot) {
@@ -241,13 +265,19 @@ export async function POST(req: NextRequest) {
     }
 
     // 2) Crear evento en Google Calendar (opcional)
+    // Si hay múltiples servicios, el título es "Servicio 1 + Servicio 2"
+    const combinedServiceName =
+      validServices.length === 1
+        ? primaryService.name
+        : validServices.map((s) => s.name).join(" + ");
+
     let googleEventId: string | null = null;
     try {
       const result = await createGoogleEvent({
-        serviceId: service.id,
-        serviceName: service.name,
-        price: service.price,
-        durationMinutes: service.duration_minutes,
+        serviceId: primaryService.id,
+        serviceName: combinedServiceName,
+        price: totalPrice,
+        durationMinutes: totalDuration,
         startISO,
         customer: {
           name: customer.name,
@@ -258,32 +288,31 @@ export async function POST(req: NextRequest) {
       });
       googleEventId = result.eventId ?? null;
     } catch (gErr) {
-      // Si Google Calendar no está configurado, continuar sin error fatal
       console.warn("[booking:gcal] No se pudo crear evento:", gErr);
     }
 
-    // 3) Crear booking en Supabase
+    // 3) Crear booking en Supabase con snapshot del servicio primario
     const { data: booking, error: bookError } = await supabase
       .from("bookings")
       .insert({
         customer_id: customerId,
-        service_id: service.id,
-        service_name: service.name,
-        service_price: service.price,
+        service_id: primaryService.id,
+        service_name: combinedServiceName,
+        service_price: totalPrice,
         customer_name: customer.name,
         customer_phone: customer.phone,
         customer_email: normalizedEmail,
         notes: customer.notes ?? null,
         starts_at: startISO,
-        duration_minutes: service.duration_minutes,
+        duration_minutes: totalDuration,
         status: "confirmed",
         google_event_id: googleEventId,
-        final_price: service.price
+        final_price: totalPrice
       })
       .select("id")
       .single();
 
-    if (bookError) {
+    if (bookError || !booking) {
       console.error("[booking:insert]", bookError);
       return NextResponse.json(
         { error: "Error guardando la reserva" },
@@ -291,9 +320,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 4) Crear booking_items (uno por servicio)
+    const items = validServices.map((s, idx) => ({
+      booking_id: booking.id,
+      service_id: s.id,
+      service_name: s.name,
+      service_price: s.price,
+      duration_minutes: s.duration_minutes,
+      position: idx
+    }));
+    const { error: itemsError } = await supabase.from("booking_items").insert(items);
+    if (itemsError) {
+      // No bloquear la reserva — los items son secundarios, el booking ya tiene
+      // snapshot del servicio combinado en las columnas existentes
+      console.warn("[booking:items]", supabaseErr(itemsError));
+    }
+
     return NextResponse.json({
       ok: true,
-      bookingId: booking?.id,
+      bookingId: booking.id,
       message: "Cita confirmada. Te enviamos un correo con los detalles."
     });
   } catch (error) {

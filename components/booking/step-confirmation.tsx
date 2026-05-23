@@ -27,14 +27,14 @@ export function ConfirmationStep({
   const [submit, setSubmit] = useState<SubmitState>({ status: "idle" });
 
   const handleConfirm = async () => {
-    if (!state.service || !state.timeISO) return;
+    if (state.services.length === 0 || !state.timeISO) return;
     setSubmit({ status: "loading" });
     try {
       const res = await fetch("/api/booking", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          serviceId: state.service.id,
+          serviceIds: state.services.map((s) => s.id),
           startISO: state.timeISO,
           customer: state.customer
         })
@@ -79,7 +79,11 @@ export function ConfirmationStep({
     );
   }
 
-  if (!state.service || !state.timeISO) return null;
+  if (state.services.length === 0 || !state.timeISO) return null;
+
+  const totalDur = state.services.reduce((sum, s) => sum + s.duration_minutes, 0);
+  const totalPrc = state.services.reduce((sum, s) => sum + s.price, 0);
+  const isMulti = state.services.length > 1;
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -98,12 +102,42 @@ export function ConfirmationStep({
           </p>
         </div>
 
-        <h4 className="font-serif text-xl font-semibold text-charcoal mb-1">
-          {state.service.name}
-        </h4>
-        <p className="font-accent text-2xl font-semibold text-mauve-700 mb-4">
-          {formatCRC(state.service.price)}
-        </p>
+        {isMulti ? (
+          <div className="mb-4">
+            <ul className="space-y-1 mb-3">
+              {state.services.map((s) => (
+                <li
+                  key={s.id}
+                  className="flex items-baseline justify-between gap-2"
+                >
+                  <span className="font-serif text-base font-semibold text-charcoal">
+                    {s.name}
+                  </span>
+                  <span className="text-sm text-charcoal-soft">
+                    {formatCRC(s.price)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex items-baseline justify-between pt-2 border-t border-mauve-200">
+              <span className="text-xs uppercase tracking-wider text-charcoal-muted font-medium">
+                Total ({state.services.length} servicios)
+              </span>
+              <span className="font-accent text-2xl font-semibold text-mauve-700">
+                {formatCRC(totalPrc)}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <>
+            <h4 className="font-serif text-xl font-semibold text-charcoal mb-1">
+              {state.services[0].name}
+            </h4>
+            <p className="font-accent text-2xl font-semibold text-mauve-700 mb-4">
+              {formatCRC(totalPrc)}
+            </p>
+          </>
+        )}
 
         <div className="space-y-3 text-sm pt-4 border-t border-mauve-200">
           <Row icon={Calendar} label="Fecha">
@@ -112,8 +146,7 @@ export function ConfirmationStep({
             </span>
           </Row>
           <Row icon={Clock} label="Hora">
-            {formatSalonTime(state.timeISO)} ·{" "}
-            {state.service.duration_minutes} min
+            {formatSalonTime(state.timeISO)} · {totalDur} min
           </Row>
           <Row icon={User} label="Nombre">
             {state.customer.name}

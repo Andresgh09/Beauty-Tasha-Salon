@@ -6,6 +6,7 @@ import { addDays, format, isSameDay, startOfWeek, isToday } from "date-fns";
 import { es } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { cn, formatCRC, formatSalonTime } from "@/lib/utils";
+import { totalDuration, totalPrice } from "./booking";
 import type { Service } from "@/lib/supabase/types";
 
 type Slot = {
@@ -22,14 +23,14 @@ const PERIOD_META = {
 } as const;
 
 export function DateTimeStep({
-  service,
+  services,
   date,
   timeISO,
   onChange,
   onBack,
   onNext
 }: {
-  service: Service;
+  services: Service[];
   date: Date | null;
   timeISO: string | null;
   onChange: (date: Date, timeISO: string | null) => void;
@@ -46,18 +47,23 @@ export function DateTimeStep({
   );
 
   const selectedDate = date ?? new Date();
+  const durationTotal = totalDuration(services);
+  const priceTotal = totalPrice(services);
+  // Para la API de disponibilidad pasamos el primer servicio
+  // (lo usaba como referencia de duración pero ahora pasamos también totalDuration)
+  const primaryService = services[0];
 
   useEffect(() => {
     if (!date) return;
     setLoading(true);
     fetch(
-      `/api/availability?date=${date.toISOString()}&service=${service.id}`
+      `/api/availability?date=${date.toISOString()}&service=${primaryService.id}&durationOverride=${durationTotal}`
     )
       .then((r) => r.json())
       .then((data) => setSlots(data.slots ?? []))
       .catch(() => setSlots([]))
       .finally(() => setLoading(false));
-  }, [date, service.id]);
+  }, [date, primaryService.id, durationTotal]);
 
   const grouped = {
     mañana: slots.filter((s) => s.period === "mañana"),
@@ -189,20 +195,33 @@ export function DateTimeStep({
       <aside className="lg:sticky lg:top-24 self-start">
         <div className="bg-mauve-50 border border-mauve-100 rounded-2xl p-5">
           <p className="text-xs uppercase tracking-wider text-mauve-700 font-medium mb-3">
-            Tu servicio
+            {services.length === 1 ? "Tu servicio" : `Tus servicios (${services.length})`}
           </p>
-          <h5 className="font-serif font-semibold text-charcoal text-lg mb-3">
-            {service.name}
-          </h5>
+          <ul className="space-y-1 mb-3">
+            {services.map((s) => (
+              <li
+                key={s.id}
+                className="font-serif font-semibold text-charcoal text-sm flex items-baseline justify-between gap-2"
+              >
+                <span className="truncate">{s.name}</span>
+                <span className="text-xs text-charcoal-muted font-sans font-normal whitespace-nowrap">
+                  {formatCRC(s.price)}
+                </span>
+              </li>
+            ))}
+          </ul>
           <div className="space-y-2 text-sm text-charcoal-soft border-t border-mauve-200 pt-3">
-            <div className="flex items-center gap-2">
-              <span className="font-accent text-mauve-700 font-semibold">
-                {formatCRC(service.price)}
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs uppercase tracking-wider text-charcoal-muted font-medium">
+                Total
+              </span>
+              <span className="font-accent text-mauve-700 font-semibold text-base">
+                {formatCRC(priceTotal)}
               </span>
             </div>
             <div className="flex items-center gap-2">
               <Clock className="w-3.5 h-3.5" />
-              <span>{service.duration_minutes} min</span>
+              <span>{durationTotal} min total</span>
             </div>
             {date && (
               <div className="flex items-center gap-2">

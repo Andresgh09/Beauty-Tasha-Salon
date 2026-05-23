@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import type { Service } from "@/lib/supabase/types";
 
 export type BookingState = {
-  service: Service | null;
+  services: Service[];
   date: Date | null;
   timeISO: string | null;
   customer: {
@@ -20,6 +20,16 @@ export type BookingState = {
     notes: string;
   };
 };
+
+/** Suma de duraciones de todos los servicios seleccionados (en minutos) */
+export function totalDuration(services: Service[]): number {
+  return services.reduce((sum, s) => sum + s.duration_minutes, 0);
+}
+
+/** Suma de precios de todos los servicios seleccionados */
+export function totalPrice(services: Service[]): number {
+  return services.reduce((sum, s) => sum + s.price, 0);
+}
 
 const STEPS = [
   { id: 1, label: "Servicio" },
@@ -31,7 +41,7 @@ const STEPS = [
 export function Booking({ services }: { services: Service[] }) {
   const [step, setStep] = useState(1);
   const [state, setState] = useState<BookingState>({
-    service: null,
+    services: [],
     date: null,
     timeISO: null,
     customer: { name: "", phone: "", email: "", notes: "" }
@@ -41,11 +51,12 @@ export function Booking({ services }: { services: Service[] }) {
     setState((s) => ({ ...s, ...patch }));
 
   // Escuchar el evento emitido desde la sección de Servicios
+  // (un solo servicio pre-seleccionado al hacer click en "Agendar")
   useEffect(() => {
     const handler = (e: Event) => {
       const service = (e as CustomEvent<Service>).detail;
       setState({
-        service,
+        services: [service],
         date: null,
         timeISO: null,
         customer: { name: "", phone: "", email: "", notes: "" }
@@ -120,16 +131,14 @@ export function Booking({ services }: { services: Service[] }) {
           {step === 1 && (
             <ServiceStep
               services={services}
-              selected={state.service}
-              onSelect={(service) => {
-                update({ service });
-                setStep(2);
-              }}
+              selected={state.services}
+              onChange={(s) => update({ services: s })}
+              onNext={() => setStep(2)}
             />
           )}
-          {step === 2 && state.service && (
+          {step === 2 && state.services.length > 0 && (
             <DateTimeStep
-              service={state.service}
+              services={state.services}
               date={state.date}
               timeISO={state.timeISO}
               onChange={(date, timeISO) => update({ date, timeISO })}
@@ -137,7 +146,7 @@ export function Booking({ services }: { services: Service[] }) {
               onNext={() => setStep(3)}
             />
           )}
-          {step === 3 && state.service && state.timeISO && (
+          {step === 3 && state.services.length > 0 && state.timeISO && (
             <ContactStep
               customer={state.customer}
               onChange={(customer) => update({ customer })}
@@ -145,12 +154,12 @@ export function Booking({ services }: { services: Service[] }) {
               onNext={() => setStep(4)}
             />
           )}
-          {step === 4 && state.service && state.timeISO && (
+          {step === 4 && state.services.length > 0 && state.timeISO && (
             <ConfirmationStep
               state={state}
               onReset={() => {
                 setState({
-                  service: null,
+                  services: [],
                   date: null,
                   timeISO: null,
                   customer: { name: "", phone: "", email: "", notes: "" }

@@ -88,6 +88,17 @@ export type Booking = {
   updated_at: string;
 };
 
+export type BookingItem = {
+  id: string;
+  booking_id: string;
+  service_id: string | null;
+  service_name: string;
+  service_price: number;
+  duration_minutes: number;
+  position: number;
+  created_at: string;
+};
+
 export type BlockedSlot = {
   id: string;
   starts_at: string;
@@ -152,6 +163,7 @@ export type Database = {
       gallery: { Row: GalleryItem; Insert: Partial<GalleryItem>; Update: Partial<GalleryItem> };
       customers: { Row: Customer; Insert: Partial<Customer>; Update: Partial<Customer> };
       bookings: { Row: Booking; Insert: Partial<Booking>; Update: Partial<Booking> };
+      booking_items: { Row: BookingItem; Insert: Partial<BookingItem>; Update: Partial<BookingItem> };
       blocked_slots: { Row: BlockedSlot; Insert: Partial<BlockedSlot>; Update: Partial<BlockedSlot> };
       business_hours: { Row: BusinessHours; Insert: Partial<BusinessHours>; Update: Partial<BusinessHours> };
       discount_codes: { Row: DiscountCode; Insert: Partial<DiscountCode>; Update: Partial<DiscountCode> };
