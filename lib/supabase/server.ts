@@ -36,16 +36,17 @@ export function createClient() {
  * Para operaciones administrativas (crear bookings desde API públicas, etc).
  */
 export function createAdminClient() {
-  return createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return [];
-        },
-        setAll() {}
-      }
+  // .trim() defensivo: si el env var tiene un \n o espacio al final
+  // (común al copiar/pegar JWTs), Supabase trata la request como anon
+  // y los GRANTs/RLS bloquean operaciones admin.
+  const url = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim();
+  const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
+  return createServerClient<Database>(url, serviceKey, {
+    cookies: {
+      getAll() {
+        return [];
+      },
+      setAll() {}
     }
-  );
+  });
 }
