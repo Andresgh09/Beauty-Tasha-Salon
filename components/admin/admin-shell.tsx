@@ -19,7 +19,8 @@ import {
   Star,
   BarChart3,
   FileText,
-  KeyRound
+  KeyRound,
+  Wallet
 } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
@@ -35,6 +36,7 @@ const navItems = [
   { href: "/admin/descuentos", label: "Descuentos", icon: Tag },
   { href: "/admin/horarios", label: "Horarios", icon: Clock },
   { href: "/admin/contenido", label: "Contenido", icon: FileText },
+  { href: "/admin/finanzas", label: "Finanzas", icon: Wallet },
   { href: "/admin/metricas", label: "Métricas", icon: BarChart3 },
   { href: "/admin/cuenta", label: "Mi cuenta", icon: KeyRound }
 ];

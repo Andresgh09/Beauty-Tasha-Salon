@@ -14,7 +14,12 @@ import {
   MoreVertical,
   Trash2,
   Pencil,
-  MessageCircle
+  MessageCircle,
+  Banknote,
+  Smartphone,
+  CreditCard,
+  ArrowLeftRight,
+  HelpCircle
 } from "lucide-react";
 import { format, isSameDay, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -27,7 +32,7 @@ import {
   salonDateKey,
   SALON_TZ
 } from "@/lib/utils";
-import type { Booking, BookingStatus } from "@/lib/supabase/types";
+import type { Booking, BookingStatus, PaymentMethod } from "@/lib/supabase/types";
 import {
   updateBooking,
   deleteBooking,
@@ -54,6 +59,21 @@ const STATUS_META: Record<
   no_show: { label: "No-show", class: "bg-orange-100 text-orange-800 border-orange-200" }
 };
 
+export const PAYMENT_METHOD_META: Record<
+  PaymentMethod,
+  {
+    label: string;
+    icon: typeof Banknote;
+    class: string;
+  }
+> = {
+  cash: { label: "Efectivo", icon: Banknote, class: "bg-green-50 text-green-700 border-green-200" },
+  sinpe: { label: "SINPE", icon: Smartphone, class: "bg-blue-50 text-blue-700 border-blue-200" },
+  transfer: { label: "Transferencia", icon: ArrowLeftRight, class: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+  card: { label: "Tarjeta", icon: CreditCard, class: "bg-purple-50 text-purple-700 border-purple-200" },
+  other: { label: "Otro", icon: HelpCircle, class: "bg-gray-50 text-gray-700 border-gray-200" }
+};
+
 export function BookingsAdmin({
   initial,
   activeFilter,
@@ -67,6 +87,7 @@ export function BookingsAdmin({
   const searchParams = useSearchParams();
   const [bookings, setBookings] = useState(initial);
   const [editing, setEditing] = useState<Booking | null>(null);
+  const [paying, setPaying] = useState<Booking | null>(null);
   const [, startTransition] = useTransition();
 
   const updateFilter = (key: string, value: string | undefined) => {
@@ -78,6 +99,11 @@ export function BookingsAdmin({
   };
 
   const handleStatusChange = (booking: Booking, status: BookingStatus) => {
+    // Si marca como completada, abrir modal de pago en vez de cambiar directo
+    if (status === "completed" && booking.status !== "completed") {
+      setPaying(booking);
+      return;
+    }
     startTransition(async () => {
       const res = await updateBooking(booking.id, { status });
       if (res.error) return alert(res.error);
@@ -198,6 +224,31 @@ export function BookingsAdmin({
                         <h3 className="font-serif font-semibold text-charcoal truncate">
                           {b.customer_name}
                         </h3>
+                        {b.payment_method &&
+                          (() => {
+                            const meta = PAYMENT_METHOD_META[b.payment_method];
+                            const Icon = meta.icon;
+                            return (
+                              <Badge
+                                variant="outline"
+                                className={`${meta.class} gap-1`}
+                                title={
+                                  b.paid_amount != null
+                                    ? `Pagado: ${formatCRC(b.paid_amount)} (${meta.label})`
+                                    : meta.label
+                                }
+                              >
+                                <Icon className="w-3 h-3" />
+                                {meta.label}
+                                {b.paid_amount != null && (
+                                  <span className="font-semibold">
+                                    {" · "}
+                                    {formatCRC(b.paid_amount)}
+                                  </span>
+                                )}
+                              </Badge>
+                            );
+                          })()}
                         <Badge
                           variant="outline"
                           className={STATUS_META[b.status].class}
@@ -291,6 +342,19 @@ export function BookingsAdmin({
         </div>
       )}
 
+      {paying && (
+        <PaymentModal
+          booking={paying}
+          onClose={() => setPaying(null)}
+          onSaved={(updated) => {
+            setBookings((b) =>
+              b.map((bk) => (bk.id === updated.id ? updated : bk))
+            );
+            setPaying(null);
+          }}
+        />
+      )}
+
       {editing && (
         <BookingNotesEditor
           booking={editing}
@@ -302,6 +366,142 @@ export function BookingsAdmin({
         />
       )}
     </>
+  );
+}
+
+/**
+ * Modal que pide método de pago + monto cuando Tasha marca una cita
+ * como completada. El monto puede diferir del precio del servicio
+ * (propinas, descuentos manuales, etc.).
+ */
+function PaymentModal({
+  booking,
+  onClose,
+  onSaved
+}: {
+  booking: Booking;
+  onClose: () => void;
+  onSaved: (b: Booking) => void;
+}) {
+  const [method, setMethod] = useState<PaymentMethod>("cash");
+  const [amount, setAmount] = useState<string>(String(booking.final_price));
+  const [pending, startTransition] = useTransition();
+
+  const handleConfirm = () => {
+    const parsedAmount = parseInt(amount, 10);
+    if (isNaN(parsedAmount) || parsedAmount < 0) {
+      alert("Monto inválido");
+      return;
+    }
+    const paidAt = new Date().toISOString();
+    startTransition(async () => {
+      const res = await updateBooking(booking.id, {
+        status: "completed",
+        payment_method: method,
+        paid_amount: parsedAmount,
+        paid_at: paidAt
+      });
+      if (res.error) return alert(res.error);
+      onSaved({
+        ...booking,
+        status: "completed",
+        payment_method: method,
+        paid_amount: parsedAmount,
+        paid_at: paidAt
+      });
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal/40 backdrop-blur-sm">
+      <div className="bg-white rounded-3xl shadow-elevated w-full max-w-md p-6 space-y-5">
+        <div>
+          <h3 className="font-serif text-xl font-semibold text-charcoal mb-1">
+            Registrar cobro
+          </h3>
+          <p className="text-sm text-charcoal-muted">
+            {booking.customer_name} · {booking.service_name}
+          </p>
+        </div>
+
+        {/* Método de pago */}
+        <div>
+          <label className="block text-sm font-medium text-charcoal mb-2">
+            Método de pago
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            {(Object.keys(PAYMENT_METHOD_META) as PaymentMethod[]).map((m) => {
+              const meta = PAYMENT_METHOD_META[m];
+              const Icon = meta.icon;
+              const selected = method === m;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMethod(m)}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-medium transition-all cursor-pointer",
+                    selected
+                      ? `${meta.class} border-current shadow-soft`
+                      : "border-mauve-100 bg-white text-charcoal-soft hover:border-mauve-300"
+                  )}
+                >
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  <span className="truncate">{meta.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Monto */}
+        <div>
+          <label
+            htmlFor="paid-amount"
+            className="block text-sm font-medium text-charcoal mb-2"
+          >
+            Monto cobrado{" "}
+            <span className="text-charcoal-muted font-normal">
+              (precio del servicio: {formatCRC(booking.final_price)})
+            </span>
+          </label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-charcoal-muted font-accent">
+              ₡
+            </span>
+            <input
+              id="paid-amount"
+              type="number"
+              min={0}
+              step={100}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full rounded-md border border-mauve-200 bg-white pl-7 pr-4 py-2.5 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mauve-500"
+              autoFocus
+            />
+          </div>
+          {parseInt(amount, 10) > booking.final_price && (
+            <p className="text-xs text-green-700 mt-1">
+              💡 Incluye propina de {formatCRC(parseInt(amount, 10) - booking.final_price)}
+            </p>
+          )}
+          {parseInt(amount, 10) < booking.final_price && parseInt(amount, 10) >= 0 && (
+            <p className="text-xs text-amber-700 mt-1">
+              ⚠️ Descuento aplicado de {formatCRC(booking.final_price - parseInt(amount, 10))}
+            </p>
+          )}
+        </div>
+
+        <div className="flex gap-2 justify-end pt-2">
+          <Button variant="ghost" onClick={onClose} disabled={pending}>
+            Cancelar
+          </Button>
+          <Button onClick={handleConfirm} disabled={pending}>
+            {pending ? "Guardando..." : "Confirmar cobro"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

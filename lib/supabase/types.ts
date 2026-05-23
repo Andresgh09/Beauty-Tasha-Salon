@@ -21,6 +21,8 @@ export type BookingStatus =
 
 export type DiscountType = "percentage" | "fixed";
 
+export type PaymentMethod = "cash" | "transfer" | "sinpe" | "card" | "other";
+
 export type Service = {
   id: string;
   slug: string;
@@ -78,6 +80,10 @@ export type Booking = {
   discount_code_id: string | null;
   discount_amount: number;
   final_price: number;
+  // Payment tracking (Fase 1 finanzas)
+  payment_method: PaymentMethod | null;
+  paid_amount: number | null;
+  paid_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -156,6 +162,7 @@ export type Database = {
       service_category: ServiceCategory;
       booking_status: BookingStatus;
       discount_type: DiscountType;
+      payment_method: PaymentMethod;
     };
   };
 };

@@ -66,7 +66,13 @@ export async function getBookings(
 const UpdateBookingSchema = z.object({
   status: z.enum(["pending", "confirmed", "completed", "cancelled", "no_show"]).optional(),
   notes: z.string().max(500).optional().nullable(),
-  starts_at: z.string().datetime().optional()
+  starts_at: z.string().datetime().optional(),
+  payment_method: z
+    .enum(["cash", "transfer", "sinpe", "card", "other"])
+    .optional()
+    .nullable(),
+  paid_amount: z.number().int().min(0).optional().nullable(),
+  paid_at: z.string().datetime().optional().nullable()
 });
 
 export async function updateBooking(
@@ -92,7 +98,13 @@ export async function updateBooking(
     }
   }
 
-  const { error } = await supabase.from("bookings").update(parsed.data).eq("id", id);
+  // Auto-set paid_at cuando status pasa a "completed" y no se pasó explícito
+  const updatePayload: Record<string, unknown> = { ...parsed.data };
+  if (parsed.data.status === "completed" && parsed.data.paid_at === undefined) {
+    updatePayload.paid_at = new Date().toISOString();
+  }
+
+  const { error } = await supabase.from("bookings").update(updatePayload).eq("id", id);
   if (error) return { error: error.message };
 
   // Cancelar evento en Google Calendar (no bloquear si falla)
@@ -106,6 +118,7 @@ export async function updateBooking(
 
   revalidatePath("/admin/citas");
   revalidatePath("/admin");
+  revalidatePath("/admin/finanzas");
   return { ok: true };
 }
 
