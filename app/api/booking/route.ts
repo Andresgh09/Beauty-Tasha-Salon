@@ -39,12 +39,36 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-// Lista blanca de orígenes permitidos para CSRF protection
-const ALLOWED_ORIGINS = new Set([
-  "https://beautytashasalon.vercel.app",
-  "http://localhost:3000",
-  "http://127.0.0.1:3000"
-]);
+// Lista blanca de orígenes permitidos para CSRF protection.
+// Vercel inyecta automáticamente VERCEL_URL (deploy actual) y
+// VERCEL_PROJECT_PRODUCTION_URL (dominio de producción) en runtime.
+// Esto permite que preview deployments funcionen sin hardcodear cada URL.
+function buildAllowedOrigins(): Set<string> {
+  const origins = new Set<string>([
+    "https://beautytashasalon.vercel.app",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000"
+  ]);
+
+  // URL única de este deploy (ej: beauty-tasha-salon-abc-andresgh09.vercel.app)
+  if (process.env.VERCEL_URL) {
+    origins.add(`https://${process.env.VERCEL_URL}`);
+  }
+
+  // URL del branch (ej: beauty-tasha-salon-git-dev-andresgh09.vercel.app)
+  if (process.env.VERCEL_BRANCH_URL) {
+    origins.add(`https://${process.env.VERCEL_BRANCH_URL}`);
+  }
+
+  // URL de producción del proyecto (igual que la hardcodeada arriba pero por si cambia)
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    origins.add(`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`);
+  }
+
+  return origins;
+}
+
+const ALLOWED_ORIGINS = buildAllowedOrigins();
 
 export async function POST(req: NextRequest) {
   try {
