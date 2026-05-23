@@ -132,19 +132,28 @@ export async function POST(req: NextRequest) {
     const normalizedEmail = customer.email.trim().toLowerCase();
     let customerId: string | null = null;
 
-    const { data: existingCustomer, error: selectError } = await supabase
+    // Usamos limit(1) en vez de maybeSingle() para tolerar duplicados legacy
+    // (maybeSingle falla si hay >1 row matching, incluso con unique index)
+    const { data: existingCustomers, error: selectError } = await supabase
       .from("customers")
       .select("id")
       .ilike("email", normalizedEmail)
-      .maybeSingle();
+      .limit(1);
 
     if (selectError) {
-      console.error("[booking:customer:select]", selectError);
+      console.error("[booking:customer:select]", {
+        code: selectError.code,
+        message: selectError.message,
+        details: selectError.details,
+        hint: selectError.hint
+      });
       return NextResponse.json(
         { error: "Error consultando cliente. Intenta de nuevo." },
         { status: 500 }
       );
     }
+
+    const existingCustomer = existingCustomers?.[0];
 
     if (existingCustomer) {
       customerId = existingCustomer.id;
@@ -174,9 +183,9 @@ export async function POST(req: NextRequest) {
             .from("customers")
             .select("id")
             .ilike("email", normalizedEmail)
-            .maybeSingle();
-          if (retried) {
-            customerId = retried.id;
+            .limit(1);
+          if (retried && retried[0]) {
+            customerId = retried[0].id;
           } else {
             console.error("[booking:customer:retry-failed]", insertError);
             return NextResponse.json(
