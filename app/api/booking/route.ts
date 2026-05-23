@@ -39,12 +39,36 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-// Lista blanca de orígenes permitidos para CSRF protection
-const ALLOWED_ORIGINS = new Set([
-  "https://beautytashasalon.vercel.app",
-  "http://localhost:3000",
-  "http://127.0.0.1:3000"
-]);
+// Lista blanca de orígenes permitidos para CSRF protection.
+// Vercel inyecta automáticamente VERCEL_URL (deploy actual) y
+// VERCEL_PROJECT_PRODUCTION_URL (dominio de producción) en runtime.
+// Esto permite que preview deployments funcionen sin hardcodear cada URL.
+function buildAllowedOrigins(): Set<string> {
+  const origins = new Set<string>([
+    "https://beautytashasalon.vercel.app",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000"
+  ]);
+
+  // URL única de este deploy (ej: beauty-tasha-salon-abc-andresgh09.vercel.app)
+  if (process.env.VERCEL_URL) {
+    origins.add(`https://${process.env.VERCEL_URL}`);
+  }
+
+  // URL del branch (ej: beauty-tasha-salon-git-dev-andresgh09.vercel.app)
+  if (process.env.VERCEL_BRANCH_URL) {
+    origins.add(`https://${process.env.VERCEL_BRANCH_URL}`);
+  }
+
+  // URL de producción del proyecto (igual que la hardcodeada arriba pero por si cambia)
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    origins.add(`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`);
+  }
+
+  return origins;
+}
+
+const ALLOWED_ORIGINS = buildAllowedOrigins();
 
 export async function POST(req: NextRequest) {
   try {
@@ -127,93 +151,86 @@ export async function POST(req: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // 1) Upsert customer (por email, case-insensitive)
-    // Normalizamos para coincidir con el índice único lower(email)
+    // Helper para loggear errores de Supabase con todos los campos relevantes
+    const supabaseErr = (
+      err: unknown
+    ): { code?: string; message?: string; details?: string; hint?: string } => {
+      const e = err as { code?: string; message?: string; details?: string; hint?: string };
+      return {
+        code: e?.code,
+        message: e?.message,
+        details: e?.details,
+        hint: e?.hint
+      };
+    };
+
+    // 1) Upsert customer (estrategia INSERT-first)
+    // Normalizamos email para coincidir con índice único lower(email)
     const normalizedEmail = customer.email.trim().toLowerCase();
     let customerId: string | null = null;
 
-    // Usamos limit(1) en vez de maybeSingle() para tolerar duplicados legacy
-    // (maybeSingle falla si hay >1 row matching, incluso con unique index)
-    const { data: existingCustomers, error: selectError } = await supabase
+    // Intento de INSERT directo. Si choca con unique violation (23505),
+    // significa que el cliente ya existe → lo buscamos.
+    const { data: newCustomer, error: insertError } = await supabase
       .from("customers")
+      .insert({
+        name: customer.name,
+        phone: customer.phone,
+        email: normalizedEmail
+      })
       .select("id")
-      .ilike("email", normalizedEmail)
-      .limit(1);
+      .single();
 
-    if (selectError) {
-      console.error("[booking:customer:select]", {
-        code: selectError.code,
-        message: selectError.message,
-        details: selectError.details,
-        hint: selectError.hint
-      });
-      return NextResponse.json(
-        { error: "Error consultando cliente. Intenta de nuevo." },
-        { status: 500 }
-      );
-    }
+    if (insertError) {
+      if (insertError.code === "23505") {
+        // Cliente ya existe — buscarlo y actualizar
+        const { data: existing, error: lookupError } = await supabase
+          .from("customers")
+          .select("id")
+          .ilike("email", normalizedEmail)
+          .limit(1);
 
-    const existingCustomer = existingCustomers?.[0];
+        if (lookupError) {
+          console.error("[booking:customer:lookup]", supabaseErr(lookupError));
+          return NextResponse.json(
+            { error: "Error consultando cliente. Intenta de nuevo." },
+            { status: 500 }
+          );
+        }
 
-    if (existingCustomer) {
-      customerId = existingCustomer.id;
-      // Actualizar nombre/teléfono pero NO bloquear la reserva si falla
-      const { error: updateError } = await supabase
-        .from("customers")
-        .update({ name: customer.name, phone: customer.phone })
-        .eq("id", customerId);
-      if (updateError) {
-        console.warn("[booking:customer:update]", updateError);
-      }
-    } else {
-      const { data: newCustomer, error: insertError } = await supabase
-        .from("customers")
-        .insert({
-          name: customer.name,
-          phone: customer.phone,
-          email: normalizedEmail
-        })
-        .select("id")
-        .single();
-
-      if (insertError) {
-        // 23505 = unique violation (race condition: alguien lo insertó entre SELECT e INSERT)
-        if (insertError.code === "23505") {
-          const { data: retried } = await supabase
-            .from("customers")
-            .select("id")
-            .ilike("email", normalizedEmail)
-            .limit(1);
-          if (retried && retried[0]) {
-            customerId = retried[0].id;
-          } else {
-            console.error("[booking:customer:retry-failed]", insertError);
-            return NextResponse.json(
-              { error: "Error guardando cliente. Intenta de nuevo." },
-              { status: 500 }
-            );
-          }
-        } else {
-          console.error("[booking:customer:insert]", {
-            code: insertError.code,
-            message: insertError.message,
-            details: insertError.details,
-            hint: insertError.hint
-          });
+        if (!existing || existing.length === 0) {
+          console.error("[booking:customer:lookup-empty]", { normalizedEmail });
           return NextResponse.json(
             { error: "Error guardando cliente. Intenta de nuevo." },
             { status: 500 }
           );
         }
-      } else if (!newCustomer) {
-        console.error("[booking:customer]", "Insert sin data ni error");
+
+        customerId = existing[0].id;
+
+        // Actualizar nombre/teléfono pero NO bloquear si falla
+        const { error: updateError } = await supabase
+          .from("customers")
+          .update({ name: customer.name, phone: customer.phone })
+          .eq("id", customerId);
+        if (updateError) {
+          console.warn("[booking:customer:update]", supabaseErr(updateError));
+        }
+      } else {
+        console.error("[booking:customer:insert]", supabaseErr(insertError));
         return NextResponse.json(
-          { error: "Error guardando cliente" },
+          { error: "Error guardando cliente. Intenta de nuevo." },
           { status: 500 }
         );
-      } else {
-        customerId = newCustomer.id;
       }
+    } else if (!newCustomer) {
+      console.error("[booking:customer]", "Insert sin data ni error");
+      return NextResponse.json(
+        { error: "Error guardando cliente" },
+        { status: 500 }
+      );
+    } else {
+      customerId = newCustomer.id;
     }
 
     if (!customerId) {
