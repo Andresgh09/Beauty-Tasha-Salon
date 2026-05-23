@@ -127,42 +127,91 @@ export async function POST(req: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // 1) Upsert customer (por email)
-    const { data: existingCustomer } = await supabase
+    // 1) Upsert customer (por email, case-insensitive)
+    // Normalizamos para coincidir con el índice único lower(email)
+    const normalizedEmail = customer.email.trim().toLowerCase();
+    let customerId: string | null = null;
+
+    const { data: existingCustomer, error: selectError } = await supabase
       .from("customers")
       .select("id")
-      .ilike("email", customer.email)
+      .ilike("email", normalizedEmail)
       .maybeSingle();
 
-    let customerId: string;
+    if (selectError) {
+      console.error("[booking:customer:select]", selectError);
+      return NextResponse.json(
+        { error: "Error consultando cliente. Intenta de nuevo." },
+        { status: 500 }
+      );
+    }
+
     if (existingCustomer) {
       customerId = existingCustomer.id;
-      await supabase
+      // Actualizar nombre/teléfono pero NO bloquear la reserva si falla
+      const { error: updateError } = await supabase
         .from("customers")
-        .update({
-          name: customer.name,
-          phone: customer.phone
-        })
+        .update({ name: customer.name, phone: customer.phone })
         .eq("id", customerId);
+      if (updateError) {
+        console.warn("[booking:customer:update]", updateError);
+      }
     } else {
-      const { data: newCustomer, error: custError } = await supabase
+      const { data: newCustomer, error: insertError } = await supabase
         .from("customers")
         .insert({
           name: customer.name,
           phone: customer.phone,
-          email: customer.email
+          email: normalizedEmail
         })
         .select("id")
         .single();
 
-      if (custError || !newCustomer) {
-        console.error("[booking:customer]", custError);
+      if (insertError) {
+        // 23505 = unique violation (race condition: alguien lo insertó entre SELECT e INSERT)
+        if (insertError.code === "23505") {
+          const { data: retried } = await supabase
+            .from("customers")
+            .select("id")
+            .ilike("email", normalizedEmail)
+            .maybeSingle();
+          if (retried) {
+            customerId = retried.id;
+          } else {
+            console.error("[booking:customer:retry-failed]", insertError);
+            return NextResponse.json(
+              { error: "Error guardando cliente. Intenta de nuevo." },
+              { status: 500 }
+            );
+          }
+        } else {
+          console.error("[booking:customer:insert]", {
+            code: insertError.code,
+            message: insertError.message,
+            details: insertError.details,
+            hint: insertError.hint
+          });
+          return NextResponse.json(
+            { error: "Error guardando cliente. Intenta de nuevo." },
+            { status: 500 }
+          );
+        }
+      } else if (!newCustomer) {
+        console.error("[booking:customer]", "Insert sin data ni error");
         return NextResponse.json(
           { error: "Error guardando cliente" },
           { status: 500 }
         );
+      } else {
+        customerId = newCustomer.id;
       }
-      customerId = newCustomer.id;
+    }
+
+    if (!customerId) {
+      return NextResponse.json(
+        { error: "Error procesando cliente" },
+        { status: 500 }
+      );
     }
 
     // 2) Crear evento en Google Calendar (opcional)
@@ -197,7 +246,7 @@ export async function POST(req: NextRequest) {
         service_price: service.price,
         customer_name: customer.name,
         customer_phone: customer.phone,
-        customer_email: customer.email,
+        customer_email: normalizedEmail,
         notes: customer.notes ?? null,
         starts_at: startISO,
         duration_minutes: service.duration_minutes,

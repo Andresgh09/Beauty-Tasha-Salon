@@ -1,10 +1,11 @@
-import { addMinutes, format, parseISO, startOfDay, endOfDay } from "date-fns";
+import { addMinutes, parseISO, startOfDay, endOfDay } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
+import { buildSalonISO } from "@/lib/utils";
 import type { BusinessHours, BlockedSlot, Booking } from "@/lib/supabase/types";
 
 export type PublicSlot = {
-  time: string; // "09:00"
-  iso: string;
+  time: string; // "09:00" (hora del salón, no del servidor)
+  iso: string; // ISO UTC correctamente convertido desde la zona del salón
   period: "mañana" | "tarde" | "noche";
   available: boolean;
 };
@@ -17,22 +18,23 @@ function buildPeriodSlots(
   slotMinutes: number
 ): Omit<PublicSlot, "available">[] {
   if (!open || !close) return [];
-  const [oh, om] = open.split(":").map(Number);
-  const [ch, cm] = close.split(":").map(Number);
-  const start = new Date(day);
-  start.setHours(oh, om ?? 0, 0, 0);
-  const end = new Date(day);
-  end.setHours(ch, cm ?? 0, 0, 0);
+  const [oh, om = 0] = open.split(":").map(Number);
+  const [ch, cm = 0] = close.split(":").map(Number);
 
   const slots: Omit<PublicSlot, "available">[] = [];
-  let cursor = start;
-  while (cursor < end) {
+  let h = oh;
+  let m = om;
+  while (h < ch || (h === ch && m < cm)) {
     slots.push({
-      time: format(cursor, "HH:mm"),
-      iso: cursor.toISOString(),
+      time: `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`,
+      iso: buildSalonISO(day, h, m),
       period
     });
-    cursor = addMinutes(cursor, slotMinutes);
+    m += slotMinutes;
+    while (m >= 60) {
+      h += 1;
+      m -= 60;
+    }
   }
   return slots;
 }

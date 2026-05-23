@@ -20,7 +20,13 @@ import { format, isSameDay, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { cn, formatCRC } from "@/lib/utils";
+import {
+  cn,
+  formatCRC,
+  formatSalonTime,
+  salonDateKey,
+  SALON_TZ
+} from "@/lib/utils";
 import type { Booking, BookingStatus } from "@/lib/supabase/types";
 import {
   updateBooking,
@@ -90,9 +96,9 @@ export function BookingsAdmin({
     });
   };
 
-  // Agrupar por día
+  // Agrupar por día (en zona horaria del salón, no del navegador)
   const grouped = bookings.reduce<Record<string, Booking[]>>((acc, b) => {
-    const key = format(parseISO(b.starts_at), "yyyy-MM-dd");
+    const key = salonDateKey(b.starts_at);
     (acc[key] ??= []).push(b);
     return acc;
   }, {});
@@ -173,10 +179,17 @@ export function BookingsAdmin({
                   >
                     <div className="w-12 h-12 rounded-xl bg-gradient-soft flex flex-col items-center justify-center text-mauve-700 flex-shrink-0">
                       <span className="text-[10px] uppercase font-semibold opacity-70">
-                        {format(parseISO(b.starts_at), "HH")}
+                        {new Intl.DateTimeFormat("en-GB", {
+                          timeZone: SALON_TZ,
+                          hour: "2-digit",
+                          hour12: false
+                        }).format(parseISO(b.starts_at))}
                       </span>
                       <span className="text-sm font-semibold leading-none">
-                        {format(parseISO(b.starts_at), ":mm")}
+                        :{new Intl.DateTimeFormat("en-GB", {
+                          timeZone: SALON_TZ,
+                          minute: "2-digit"
+                        }).format(parseISO(b.starts_at)).padStart(2, "0")}
                       </span>
                     </div>
 
@@ -204,7 +217,7 @@ export function BookingsAdmin({
                           {b.customer_phone}
                         </a>
                         <a
-                          href={`https://wa.me/${b.customer_phone.replace(/\D/g, "")}?text=Hola%20${encodeURIComponent(b.customer_name)}%2C%20te%20escribo%20de%20Beauty%20Tasha%20Sal%C3%B3n%20sobre%20tu%20cita%20de%20${encodeURIComponent(b.service_name)}%20el%20${encodeURIComponent(format(parseISO(b.starts_at), "EEEE d 'a las' h:mm a", { locale: es }))}.`}
+                          href={`https://wa.me/${b.customer_phone.replace(/\D/g, "")}?text=Hola%20${encodeURIComponent(b.customer_name)}%2C%20te%20escribo%20de%20Beauty%20Tasha%20Sal%C3%B3n%20sobre%20tu%20cita%20de%20${encodeURIComponent(b.service_name)}%20el%20${encodeURIComponent(new Intl.DateTimeFormat("es-CR", { timeZone: SALON_TZ, weekday: "long", day: "numeric" }).format(parseISO(b.starts_at)) + " a las " + formatSalonTime(b.starts_at))}.`}
                           target="_blank"
                           rel="noreferrer"
                           className="flex items-center gap-1 hover:text-green-600"

@@ -11,7 +11,7 @@ import {
   CheckCircle2
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { formatCRC } from "@/lib/utils";
+import { formatCRC, formatSalonTime, SALON_TZ } from "@/lib/utils";
 import { format, startOfMonth, endOfMonth, addDays } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -144,7 +144,7 @@ export default async function AdminDashboard() {
                   <p className="text-xs text-charcoal-muted">{b.service_name}</p>
                 </div>
                 <span className="font-accent text-mauve-700 font-semibold">
-                  {format(new Date(b.starts_at), "h:mm a")}
+                  {formatSalonTime(b.starts_at)}
                 </span>
               </li>
             ))}
@@ -212,7 +212,12 @@ export default async function AdminDashboard() {
                   </div>
                 </div>
                 <span className="text-sm text-charcoal capitalize">
-                  {format(new Date(b.starts_at), "EEE d · h:mm a", { locale: es })}
+                  {new Intl.DateTimeFormat("es-CR", {
+                    timeZone: SALON_TZ,
+                    weekday: "short",
+                    day: "numeric"
+                  }).format(new Date(b.starts_at))}{" · "}
+                  {formatSalonTime(b.starts_at)}
                 </span>
               </li>
             ))}
