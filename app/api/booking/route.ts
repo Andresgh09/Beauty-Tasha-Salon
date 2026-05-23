@@ -127,93 +127,102 @@ export async function POST(req: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // 1) Upsert customer (por email, case-insensitive)
-    // Normalizamos para coincidir con el índice único lower(email)
+    // Modo debug: si está activo, devolvemos el detalle del error de Supabase
+    // al cliente para diagnosticar en navegador. Apagar tras debug.
+    const DEBUG = process.env.BOOKING_DEBUG === "1";
+    const supabaseErr = (
+      err: unknown
+    ): { code?: string; message?: string; details?: string; hint?: string } => {
+      const e = err as { code?: string; message?: string; details?: string; hint?: string };
+      return {
+        code: e?.code,
+        message: e?.message,
+        details: e?.details,
+        hint: e?.hint
+      };
+    };
+
+    // 1) Upsert customer (estrategia INSERT-first)
+    // Normalizamos email para coincidir con índice único lower(email)
     const normalizedEmail = customer.email.trim().toLowerCase();
     let customerId: string | null = null;
 
-    // Usamos limit(1) en vez de maybeSingle() para tolerar duplicados legacy
-    // (maybeSingle falla si hay >1 row matching, incluso con unique index)
-    const { data: existingCustomers, error: selectError } = await supabase
+    // Intento de INSERT directo. Si choca con unique violation (23505),
+    // significa que el cliente ya existe → lo buscamos.
+    const { data: newCustomer, error: insertError } = await supabase
       .from("customers")
+      .insert({
+        name: customer.name,
+        phone: customer.phone,
+        email: normalizedEmail
+      })
       .select("id")
-      .ilike("email", normalizedEmail)
-      .limit(1);
+      .single();
 
-    if (selectError) {
-      console.error("[booking:customer:select]", {
-        code: selectError.code,
-        message: selectError.message,
-        details: selectError.details,
-        hint: selectError.hint
-      });
-      return NextResponse.json(
-        { error: "Error consultando cliente. Intenta de nuevo." },
-        { status: 500 }
-      );
-    }
+    if (insertError) {
+      if (insertError.code === "23505") {
+        // Cliente ya existe — buscarlo y actualizar
+        const { data: existing, error: lookupError } = await supabase
+          .from("customers")
+          .select("id")
+          .ilike("email", normalizedEmail)
+          .limit(1);
 
-    const existingCustomer = existingCustomers?.[0];
-
-    if (existingCustomer) {
-      customerId = existingCustomer.id;
-      // Actualizar nombre/teléfono pero NO bloquear la reserva si falla
-      const { error: updateError } = await supabase
-        .from("customers")
-        .update({ name: customer.name, phone: customer.phone })
-        .eq("id", customerId);
-      if (updateError) {
-        console.warn("[booking:customer:update]", updateError);
-      }
-    } else {
-      const { data: newCustomer, error: insertError } = await supabase
-        .from("customers")
-        .insert({
-          name: customer.name,
-          phone: customer.phone,
-          email: normalizedEmail
-        })
-        .select("id")
-        .single();
-
-      if (insertError) {
-        // 23505 = unique violation (race condition: alguien lo insertó entre SELECT e INSERT)
-        if (insertError.code === "23505") {
-          const { data: retried } = await supabase
-            .from("customers")
-            .select("id")
-            .ilike("email", normalizedEmail)
-            .limit(1);
-          if (retried && retried[0]) {
-            customerId = retried[0].id;
-          } else {
-            console.error("[booking:customer:retry-failed]", insertError);
-            return NextResponse.json(
-              { error: "Error guardando cliente. Intenta de nuevo." },
-              { status: 500 }
-            );
-          }
-        } else {
-          console.error("[booking:customer:insert]", {
-            code: insertError.code,
-            message: insertError.message,
-            details: insertError.details,
-            hint: insertError.hint
-          });
+        if (lookupError) {
+          const errInfo = supabaseErr(lookupError);
+          console.error("[booking:customer:lookup]", errInfo);
           return NextResponse.json(
-            { error: "Error guardando cliente. Intenta de nuevo." },
+            {
+              error: DEBUG
+                ? `Lookup falló: ${errInfo.message ?? "desconocido"}`
+                : "Error consultando cliente. Intenta de nuevo."
+            },
             { status: 500 }
           );
         }
-      } else if (!newCustomer) {
-        console.error("[booking:customer]", "Insert sin data ni error");
+
+        if (!existing || existing.length === 0) {
+          console.error("[booking:customer:lookup-empty]", { normalizedEmail });
+          return NextResponse.json(
+            {
+              error: DEBUG
+                ? "Lookup vacío tras 23505 — inconsistencia"
+                : "Error guardando cliente. Intenta de nuevo."
+            },
+            { status: 500 }
+          );
+        }
+
+        customerId = existing[0].id;
+
+        // Actualizar nombre/teléfono pero NO bloquear si falla
+        const { error: updateError } = await supabase
+          .from("customers")
+          .update({ name: customer.name, phone: customer.phone })
+          .eq("id", customerId);
+        if (updateError) {
+          console.warn("[booking:customer:update]", supabaseErr(updateError));
+        }
+      } else {
+        const errInfo = supabaseErr(insertError);
+        console.error("[booking:customer:insert]", errInfo);
         return NextResponse.json(
-          { error: "Error guardando cliente" },
+          {
+            error: DEBUG
+              ? `Insert falló (${errInfo.code}): ${errInfo.message ?? "desconocido"}`
+              : "Error guardando cliente. Intenta de nuevo."
+          },
           { status: 500 }
         );
-      } else {
-        customerId = newCustomer.id;
       }
+    } else if (!newCustomer) {
+      console.error("[booking:customer]", "Insert sin data ni error");
+      return NextResponse.json(
+        { error: "Error guardando cliente" },
+        { status: 500 }
+      );
+    } else {
+      customerId = newCustomer.id;
     }
 
     if (!customerId) {
