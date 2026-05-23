@@ -151,9 +151,7 @@ export async function POST(req: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // Modo debug: si está activo, devolvemos el detalle del error de Supabase
-    // al cliente para diagnosticar en navegador. Apagar tras debug.
-    const DEBUG = process.env.BOOKING_DEBUG === "1";
+    // Helper para loggear errores de Supabase con todos los campos relevantes
     const supabaseErr = (
       err: unknown
     ): { code?: string; message?: string; details?: string; hint?: string } => {
@@ -193,14 +191,9 @@ export async function POST(req: NextRequest) {
           .limit(1);
 
         if (lookupError) {
-          const errInfo = supabaseErr(lookupError);
-          console.error("[booking:customer:lookup]", errInfo);
+          console.error("[booking:customer:lookup]", supabaseErr(lookupError));
           return NextResponse.json(
-            {
-              error: DEBUG
-                ? `Lookup falló: ${errInfo.message ?? "desconocido"}`
-                : "Error consultando cliente. Intenta de nuevo."
-            },
+            { error: "Error consultando cliente. Intenta de nuevo." },
             { status: 500 }
           );
         }
@@ -208,11 +201,7 @@ export async function POST(req: NextRequest) {
         if (!existing || existing.length === 0) {
           console.error("[booking:customer:lookup-empty]", { normalizedEmail });
           return NextResponse.json(
-            {
-              error: DEBUG
-                ? "Lookup vacío tras 23505 — inconsistencia"
-                : "Error guardando cliente. Intenta de nuevo."
-            },
+            { error: "Error guardando cliente. Intenta de nuevo." },
             { status: 500 }
           );
         }
@@ -228,14 +217,9 @@ export async function POST(req: NextRequest) {
           console.warn("[booking:customer:update]", supabaseErr(updateError));
         }
       } else {
-        const errInfo = supabaseErr(insertError);
-        console.error("[booking:customer:insert]", errInfo);
+        console.error("[booking:customer:insert]", supabaseErr(insertError));
         return NextResponse.json(
-          {
-            error: DEBUG
-              ? `Insert falló (${errInfo.code}): ${errInfo.message ?? "desconocido"}`
-              : "Error guardando cliente. Intenta de nuevo."
-          },
+          { error: "Error guardando cliente. Intenta de nuevo." },
           { status: 500 }
         );
       }
