@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --mauve-50: #FBF8FE;
+    --mauve-100: #EADCF0;
+    --mauve-200: #E2CDF4;
+    --mauve-300: #D9BDF8;
+    --mauve-400: #D1AEFC;
+    --mauve-500: #C89EFF;
+    --mauve-700: #8B5CF6;
+    --charcoal: #2D1B4E;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif tracking-tight;
+  }
+
+  ::selection {
+    background: var(--mauve-300);
+    color: var(--charcoal);
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Flores decorativas - 3 patrones de drift diferentes para variar el movimiento */
+  @keyframes flower-drift-1 {
+    0%, 100% { transform: translate(0, 0); }
+    25%      { transform: translate(20px, -25px); }
+    50%      { transform: translate(-15px, -40px); }
+    75%      { transform: translate(10px, -20px); }
+  }
+  @keyframes flower-drift-2 {
+    0%, 100% { transform: translate(0, 0); }
+    33%      { transform: translate(-25px, -15px); }
+    66%      { transform: translate(20px, -35px); }
+  }
+  @keyframes flower-drift-3 {
+    0%, 100% { transform: translate(0, 0); }
+    20%      { transform: translate(15px, -10px); }
+    40%      { transform: translate(-10px, -30px); }
+    60%      { transform: translate(25px, -20px); }
+    80%      { transform: translate(-15px, -15px); }
+  }
+  @keyframes flower-spin {
+    0%   { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .flower-drift {
+    animation-iteration-count: infinite;
+    animation-timing-function: ease-in-out;
+    will-change: transform;
+  }
+  .flower-drift.drift-1 { animation-name: flower-drift-1; }
+  .flower-drift.drift-2 { animation-name: flower-drift-2; }
+  .flower-drift.drift-3 { animation-name: flower-drift-3; }
+
+  .flower-spin {
+    animation: flower-spin linear infinite;
+    will-change: transform;
+  }
+
+  .glass {
+    @apply bg-white/70 backdrop-blur-xl border border-white/40;
+  }
+  .glass-mauve {
+    background: linear-gradient(135deg, rgba(234, 220, 240, 0.6), rgba(217, 189, 248, 0.4));
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+  }
+  .text-gradient {
+    @apply bg-gradient-to-br from-mauve-700 to-mauve-500 bg-clip-text text-transparent;
+  }
+  .shimmer-bg {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(200, 158, 255, 0.15) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
