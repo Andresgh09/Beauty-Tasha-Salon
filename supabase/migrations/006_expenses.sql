@@ -42,7 +42,7 @@ comment on column expenses.amount is 'Monto en colones (entero)';
 create trigger expenses_updated_at
   before update on expenses
   for each row
-  execute function update_updated_at_column();
+  execute function set_updated_at();
 
 -- 4) RLS — solo admin (authenticated) puede ver/editar
 alter table expenses enable row level security;
