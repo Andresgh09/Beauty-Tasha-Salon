@@ -45,6 +45,9 @@ export const metadata: Metadata = {
     "beauty tasha salon"
   ],
   authors: [{ name: "Beauty Tasha Salón" }],
+  // NOTA: og:image, twitter:image, favicon y apple-icon se generan
+  // automáticamente desde las convenciones de Next.js:
+  //   app/icon.svg, app/apple-icon.tsx, app/opengraph-image.tsx
   openGraph: {
     title: "Beauty Tasha Salón — Nail Studio en San José, Costa Rica",
     description:
@@ -52,34 +55,18 @@ export const metadata: Metadata = {
     url: BASE_URL,
     siteName: "Beauty Tasha Salón",
     locale: "es_CR",
-    type: "website",
-    images: [
-      {
-        url: "/og-image.jpg",
-        width: 1200,
-        height: 630,
-        alt: "Beauty Tasha Salón — Nail Studio Premium en Costa Rica"
-      }
-    ]
+    type: "website"
   },
   twitter: {
     card: "summary_large_image",
     title: "Beauty Tasha Salón — Nail Studio en San José, Costa Rica",
     description:
-      "Manicure, pedicure y extensiones de uñas en San José. Reserva tu cita online.",
-    images: ["/og-image.jpg"]
+      "Manicure, pedicure y extensiones de uñas en San José. Reserva tu cita online."
   },
   robots: {
     index: true,
     follow: true,
     googleBot: { index: true, follow: true, "max-image-preview": "large" }
-  },
-  icons: {
-    icon: [
-      { url: "/favicon.ico" },
-      { url: "/icon.png", type: "image/png" }
-    ],
-    apple: "/apple-icon.png"
   }
 };
 
