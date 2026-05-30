@@ -4,10 +4,21 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   Wallet,
   TrendingUp,
+  TrendingDown,
   Receipt,
-  Calendar as CalendarIcon
+  Download,
+  LineChart,
+  PieChart as PieIcon,
+  BarChart3
 } from "lucide-react";
 import { PAYMENT_METHOD_META } from "./bookings-admin";
+import {
+  RevenueExpensesChart,
+  PaymentMethodPie,
+  ExpenseCategoryPie,
+  TopServicesBar
+} from "./finanzas-charts";
+import { ExpensesSection } from "./expenses-section";
 import {
   cn,
   formatCRC,
@@ -44,56 +55,140 @@ export function FinanzasView({
 
   const methods = Object.keys(stats.byMethod) as PaymentMethod[];
   const methodsWithRevenue = methods.filter((m) => stats.byMethod[m].count > 0);
-  const totalForBars = stats.totalRevenue || 1; // evita div/0 al calcular %
+  const totalForBars = stats.totalRevenue || 1;
+
+  const netPositive = stats.netProfit >= 0;
 
   return (
     <div className="space-y-6">
-      {/* Filtros de rango */}
+      {/* Filtros de rango + exports */}
       <div className="bg-white rounded-2xl border border-mauve-100 p-4 shadow-card">
-        <div className="flex flex-wrap gap-2">
-          {RANGES.map((r) => (
-            <button
-              key={r.value}
-              onClick={() => changeRange(r.value)}
-              className={cn(
-                "px-4 py-1.5 rounded-full text-xs font-medium border transition-colors cursor-pointer",
-                activeRange === r.value
-                  ? "bg-gradient-brand text-white border-transparent shadow-soft"
-                  : "bg-white border-mauve-200 text-charcoal hover:bg-mauve-50"
-              )}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2">
+            {RANGES.map((r) => (
+              <button
+                key={r.value}
+                onClick={() => changeRange(r.value)}
+                className={cn(
+                  "px-4 py-1.5 rounded-full text-xs font-medium border transition-colors cursor-pointer",
+                  activeRange === r.value
+                    ? "bg-gradient-brand text-white border-transparent shadow-soft"
+                    : "bg-white border-mauve-200 text-charcoal hover:bg-mauve-50"
+                )}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <a
+              href={`/api/admin/finanzas/export?range=${activeRange}&kind=cobros`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-mauve-200 bg-white text-charcoal hover:bg-mauve-50 transition-colors"
             >
-              {r.label}
-            </button>
-          ))}
+              <Download className="w-3.5 h-3.5" />
+              CSV cobros
+            </a>
+            <a
+              href={`/api/admin/finanzas/export?range=${activeRange}&kind=gastos`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-mauve-200 bg-white text-charcoal hover:bg-mauve-50 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              CSV gastos
+            </a>
+          </div>
         </div>
       </div>
 
       {/* Stat cards principales */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           icon={Wallet}
-          label="Ingresos totales"
+          label="Ingresos"
           value={formatCRC(stats.totalRevenue)}
           accent="text-mauve-700"
         />
         <StatCard
-          icon={Receipt}
-          label="Cobros realizados"
-          value={String(stats.bookingsCount)}
-          accent="text-charcoal"
+          icon={TrendingDown}
+          label="Gastos"
+          value={formatCRC(stats.totalExpenses)}
+          accent="text-red-600"
+          iconBg="bg-red-50"
+          iconColor="text-red-600"
         />
         <StatCard
           icon={TrendingUp}
+          label="Utilidad neta"
+          value={formatCRC(stats.netProfit)}
+          accent={netPositive ? "text-green-700" : "text-red-700"}
+          iconBg={netPositive ? "bg-green-50" : "bg-red-50"}
+          iconColor={netPositive ? "text-green-700" : "text-red-700"}
+        />
+        <StatCard
+          icon={Receipt}
           label="Ticket promedio"
           value={formatCRC(stats.averageTicket)}
-          accent="text-green-700"
+          accent="text-charcoal"
+          sub={`${stats.bookingsCount} ${stats.bookingsCount === 1 ? "cobro" : "cobros"}`}
         />
       </div>
 
-      {/* Breakdown por método de pago */}
+      {/* Chart: tendencia ingresos vs gastos */}
+      <section className="bg-white rounded-3xl border border-mauve-100 p-6 shadow-card">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-8 h-8 rounded-lg bg-mauve-100 flex items-center justify-center">
+            <LineChart className="w-4 h-4 text-mauve-700" />
+          </div>
+          <h2 className="font-serif text-xl font-semibold text-charcoal">
+            Tendencia
+          </h2>
+        </div>
+        <RevenueExpensesChart data={stats.timeseries} />
+      </section>
+
+      {/* Charts: pie payment method + pie categories + top servicios */}
+      <div className="grid lg:grid-cols-3 gap-4">
+        <section className="bg-white rounded-3xl border border-mauve-100 p-6 shadow-card">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-lg bg-mauve-100 flex items-center justify-center">
+              <PieIcon className="w-4 h-4 text-mauve-700" />
+            </div>
+            <h3 className="font-serif text-base font-semibold text-charcoal">
+              Métodos de pago
+            </h3>
+          </div>
+          <PaymentMethodPie byMethod={stats.byMethod} />
+        </section>
+
+        <section className="bg-white rounded-3xl border border-mauve-100 p-6 shadow-card">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center">
+              <PieIcon className="w-4 h-4 text-red-600" />
+            </div>
+            <h3 className="font-serif text-base font-semibold text-charcoal">
+              Gastos por categoría
+            </h3>
+          </div>
+          <ExpenseCategoryPie byCategory={stats.byExpenseCategory} />
+        </section>
+
+        <section className="bg-white rounded-3xl border border-mauve-100 p-6 shadow-card">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-lg bg-mauve-100 flex items-center justify-center">
+              <BarChart3 className="w-4 h-4 text-mauve-700" />
+            </div>
+            <h3 className="font-serif text-base font-semibold text-charcoal">
+              Top servicios
+            </h3>
+          </div>
+          <TopServicesBar data={stats.topServices} />
+        </section>
+      </div>
+
+      {/* Breakdown por método de pago — vista original con barras */}
       <section className="bg-white rounded-3xl border border-mauve-100 p-6 shadow-card">
         <h2 className="font-serif text-xl font-semibold text-charcoal mb-4">
-          Por método de pago
+          Por método de pago — detalle
         </h2>
         {stats.totalRevenue === 0 ? (
           <p className="text-charcoal-muted text-sm py-6 text-center">
@@ -142,6 +237,9 @@ export function FinanzasView({
           </div>
         )}
       </section>
+
+      {/* Sección de gastos con CRUD */}
+      <ExpensesSection expenses={stats.expenses} />
 
       {/* Lista detallada de cobros */}
       <section className="bg-white rounded-3xl border border-mauve-100 p-6 shadow-card">
@@ -230,12 +328,18 @@ function StatCard({
   icon: Icon,
   label,
   value,
-  accent
+  accent,
+  sub,
+  iconBg = "bg-mauve-100",
+  iconColor = "text-mauve-700"
 }: {
   icon: typeof Wallet;
   label: string;
   value: string;
   accent?: string;
+  sub?: string;
+  iconBg?: string;
+  iconColor?: string;
 }) {
   return (
     <div className="bg-white rounded-2xl border border-mauve-100 p-5 shadow-card">
@@ -243,13 +347,24 @@ function StatCard({
         <span className="text-xs uppercase tracking-wider text-charcoal-muted font-medium">
           {label}
         </span>
-        <div className="w-9 h-9 rounded-full bg-mauve-100 flex items-center justify-center">
-          <Icon className="w-4 h-4 text-mauve-700" />
+        <div
+          className={cn(
+            "w-9 h-9 rounded-full flex items-center justify-center",
+            iconBg
+          )}
+        >
+          <Icon className={cn("w-4 h-4", iconColor)} />
         </div>
       </div>
-      <p className={cn("font-serif text-2xl font-semibold", accent ?? "text-charcoal")}>
+      <p
+        className={cn(
+          "font-serif text-2xl font-semibold",
+          accent ?? "text-charcoal"
+        )}
+      >
         {value}
       </p>
+      {sub && <p className="text-xs text-charcoal-muted mt-1">{sub}</p>}
     </div>
   );
 }

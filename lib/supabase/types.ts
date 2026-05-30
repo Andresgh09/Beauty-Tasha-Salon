@@ -23,6 +23,28 @@ export type DiscountType = "percentage" | "fixed";
 
 export type PaymentMethod = "cash" | "transfer" | "sinpe" | "card" | "other";
 
+export type ExpenseCategory =
+  | "materials"
+  | "rent"
+  | "utilities"
+  | "marketing"
+  | "salary"
+  | "equipment"
+  | "maintenance"
+  | "transport"
+  | "other";
+
+export type Expense = {
+  id: string;
+  category: ExpenseCategory;
+  description: string;
+  amount: number;
+  spent_at: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Service = {
   id: string;
   slug: string;
@@ -169,12 +191,14 @@ export type Database = {
       discount_codes: { Row: DiscountCode; Insert: Partial<DiscountCode>; Update: Partial<DiscountCode> };
       testimonials: { Row: Testimonial; Insert: Partial<Testimonial>; Update: Partial<Testimonial> };
       site_settings: { Row: SiteSetting; Insert: Partial<SiteSetting>; Update: Partial<SiteSetting> };
+      expenses: { Row: Expense; Insert: Partial<Expense>; Update: Partial<Expense> };
     };
     Enums: {
       service_category: ServiceCategory;
       booking_status: BookingStatus;
       discount_type: DiscountType;
       payment_method: PaymentMethod;
+      expense_category: ExpenseCategory;
     };
   };
 };
