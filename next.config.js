@@ -15,12 +15,6 @@ const nextConfig = {
   },
   eslint: {
     ignoreDuringBuilds: true
-  },
-  // Asegura que las fuentes de las imágenes OG se incluyan en el bundle
-  // serverless de Vercel (las leemos con fs en runtime).
-  outputFileTracingIncludes: {
-    "/opengraph-image": ["./app/_og-assets/**"],
-    "/apple-icon": ["./app/_og-assets/**"]
   }
 };
 
