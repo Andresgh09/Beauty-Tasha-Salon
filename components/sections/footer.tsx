@@ -1,12 +1,12 @@
 import Link from "next/link";
+import Image from "next/image";
 import {
   Instagram,
   Facebook,
   MessageCircle,
   MapPin,
   Phone,
-  Clock,
-  Sparkles
+  Clock
 } from "lucide-react";
 import type { ContactSettings } from "@/lib/queries/settings";
 
@@ -41,8 +41,14 @@ export function Footer({ contact }: { contact: ContactSettings | null }) {
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-10 mb-12">
           <div className="lg:col-span-1">
             <Link href="/" className="flex items-center gap-2 mb-4 group">
-              <div className="w-10 h-10 rounded-full bg-gradient-brand flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-white" />
+              <div className="relative w-11 h-11 rounded-full overflow-hidden bg-white shadow-soft ring-1 ring-white/20">
+                <Image
+                  src="/icon.png"
+                  alt=""
+                  fill
+                  sizes="44px"
+                  className="object-contain scale-110"
+                />
               </div>
               <div className="flex flex-col leading-tight">
                 <span className="font-serif text-lg font-semibold">

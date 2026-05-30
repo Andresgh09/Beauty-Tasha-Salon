@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Menu, X, Sparkles } from "lucide-react";
+import Image from "next/image";
+import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -43,8 +44,15 @@ export function Navbar() {
           className="flex items-center gap-2 group"
           aria-label="Beauty Tasha Salón inicio"
         >
-          <div className="w-9 h-9 rounded-full bg-gradient-brand flex items-center justify-center shadow-soft group-hover:shadow-glow transition-shadow">
-            <Sparkles className="w-4 h-4 text-white" />
+          <div className="relative w-10 h-10 rounded-full overflow-hidden bg-white shadow-soft group-hover:shadow-glow transition-shadow ring-1 ring-mauve-200/60">
+            <Image
+              src="/icon.png"
+              alt=""
+              fill
+              sizes="40px"
+              className="object-contain scale-110"
+              priority
+            />
           </div>
           <div className="flex flex-col leading-tight">
             <span className="font-serif text-base font-semibold text-charcoal">
