@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Sparkles,
   LayoutDashboard,
   Scissors,
   Image as ImageIcon,
@@ -70,8 +70,15 @@ export function AdminShell({
       >
         <div className="p-6 border-b border-mauve-100">
           <Link href="/admin" className="flex items-center gap-2 group">
-            <div className="w-10 h-10 rounded-full bg-gradient-brand flex items-center justify-center shadow-soft">
-              <Sparkles className="w-5 h-5 text-white" />
+            <div className="relative w-11 h-11 rounded-full overflow-hidden bg-white shadow-soft ring-1 ring-mauve-200/60">
+              <Image
+                src="/icon.png"
+                alt=""
+                fill
+                sizes="44px"
+                className="object-contain scale-110"
+                priority
+              />
             </div>
             <div className="flex flex-col leading-tight">
               <span className="font-serif text-base font-semibold text-charcoal">
@@ -156,8 +163,14 @@ export function AdminShell({
         {/* Topbar mobile */}
         <header className="lg:hidden sticky top-0 z-20 bg-white border-b border-mauve-100 px-4 py-3 flex items-center justify-between">
           <Link href="/admin" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-white" />
+            <div className="relative w-9 h-9 rounded-full overflow-hidden bg-white ring-1 ring-mauve-200/60">
+              <Image
+                src="/icon.png"
+                alt=""
+                fill
+                sizes="36px"
+                className="object-contain scale-110"
+              />
             </div>
             <span className="font-serif font-semibold text-charcoal">Admin</span>
           </Link>

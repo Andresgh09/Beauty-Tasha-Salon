@@ -2,7 +2,8 @@
 
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Sparkles, Eye, EyeOff, AlertCircle } from "lucide-react";
+import Image from "next/image";
+import { Eye, EyeOff, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,8 +55,15 @@ function LoginForm() {
 
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-brand shadow-glow mb-4">
-            <Sparkles className="w-8 h-8 text-white" />
+          <div className="relative inline-block w-20 h-20 rounded-full overflow-hidden bg-white shadow-glow ring-1 ring-mauve-200 mb-4">
+            <Image
+              src="/icon.png"
+              alt="Beauty Tasha Salón"
+              fill
+              sizes="80px"
+              className="object-contain scale-110"
+              priority
+            />
           </div>
           <h1 className="font-serif text-3xl font-semibold text-charcoal mb-1">
             Panel de administración
