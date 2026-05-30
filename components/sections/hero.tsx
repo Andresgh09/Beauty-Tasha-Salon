@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Sparkles, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FlowerField } from "@/components/decor/flower-field";
 import type { HeroSettings } from "@/lib/queries/settings";
@@ -37,9 +37,15 @@ export function Hero({ settings }: { settings: HeroSettings | null }) {
 
       <div className="container relative grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
         <div className="flex flex-col gap-6 animate-fade-in-up">
-          <div className="inline-flex items-center gap-2 self-start glass-mauve rounded-full px-4 py-1.5 text-xs font-medium text-mauve-700">
-            <Sparkles className="w-3.5 h-3.5" />
-            {s.badge}
+          <div className="self-start relative w-44 h-44 md:w-52 md:h-52 -mb-4 -ml-2 mix-blend-multiply">
+            <Image
+              src="/logo-full.png"
+              alt="Beauty Tasha Salón"
+              fill
+              sizes="(max-width: 768px) 176px, 208px"
+              className="object-contain"
+              priority
+            />
           </div>
 
           <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl font-semibold tracking-tight text-charcoal leading-[1.05] text-balance">
