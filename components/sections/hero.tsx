@@ -37,12 +37,12 @@ export function Hero({ settings }: { settings: HeroSettings | null }) {
 
       <div className="container relative grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
         <div className="flex flex-col gap-6 animate-fade-in-up">
-          <div className="self-start relative w-44 h-44 md:w-52 md:h-52 -mb-4 -ml-2 mix-blend-multiply">
+          <div className="self-center relative w-56 h-56 md:w-64 md:h-64 -mb-4 mix-blend-multiply">
             <Image
               src="/logo-full.png"
               alt="Beauty Tasha Salón"
               fill
-              sizes="(max-width: 768px) 176px, 208px"
+              sizes="(max-width: 768px) 224px, 256px"
               className="object-contain"
               priority
             />
