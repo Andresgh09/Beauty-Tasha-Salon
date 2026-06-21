@@ -61,7 +61,7 @@ export function Booking({ services }: { services: Service[] }) {
         timeISO: null,
         customer: { name: "", phone: "", email: "", notes: "" }
       });
-      setStep(2);
+      setStep(1);
     };
     window.addEventListener("booking:select-service", handler);
     return () => window.removeEventListener("booking:select-service", handler);
