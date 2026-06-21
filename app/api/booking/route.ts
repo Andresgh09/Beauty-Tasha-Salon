@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createBooking as createGoogleEvent } from "@/lib/google-calendar";
+import { sendNewBookingNotification } from "@/lib/email";
 import { getServiceById } from "@/lib/queries/services";
 import { getPublicAvailableSlots } from "@/lib/queries/availability";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -334,6 +335,24 @@ export async function POST(req: NextRequest) {
       // No bloquear la reserva — los items son secundarios, el booking ya tiene
       // snapshot del servicio combinado en las columnas existentes
       console.warn("[booking:items]", supabaseErr(itemsError));
+    }
+
+    // 5) Notificar a Tasha por email (independiente de Google Calendar).
+    // No bloquea — si falla, queda warn en logs.
+    try {
+      await sendNewBookingNotification({
+        customerName: customer.name,
+        customerPhone: customer.phone,
+        customerEmail: normalizedEmail,
+        serviceName: combinedServiceName,
+        totalPrice,
+        durationMinutes: totalDuration,
+        startISO,
+        notes: customer.notes ?? null,
+        hasGoogleEvent: googleEventId !== null
+      });
+    } catch (mailErr) {
+      console.warn("[booking:email] No se pudo notificar a Tasha:", mailErr);
     }
 
     return NextResponse.json({
