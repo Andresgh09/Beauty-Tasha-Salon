@@ -341,6 +341,7 @@ export async function POST(req: NextRequest) {
     // No bloquea — si falla, queda warn en logs.
     try {
       await sendNewBookingNotification({
+        bookingId: booking.id,
         customerName: customer.name,
         customerPhone: customer.phone,
         customerEmail: normalizedEmail,

@@ -22,6 +22,7 @@ function hasEmailConfig(): boolean {
 }
 
 export type NewBookingEmailPayload = {
+  bookingId: string;
   customerName: string;
   customerPhone: string;
   customerEmail: string;
@@ -111,7 +112,16 @@ export async function sendNewBookingNotification(
               ${notesBlock}
             </table>
 
-            <a href="${PUBLIC_URL}/admin/citas" style="display:inline-block;background:linear-gradient(135deg,#C89EFF 0%,#8B5CF6 100%);color:#FFFFFF;text-decoration:none;padding:12px 24px;border-radius:999px;font-size:14px;font-weight:600;">Ver en panel admin →</a>
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0;">
+              <tr>
+                <td style="padding-right:10px;">
+                  <a href="${PUBLIC_URL}/admin/citas" style="display:inline-block;background:linear-gradient(135deg,#C89EFF 0%,#8B5CF6 100%);color:#FFFFFF;text-decoration:none;padding:12px 24px;border-radius:999px;font-size:14px;font-weight:600;">Ver en panel admin →</a>
+                </td>
+                <td>
+                  <a href="${PUBLIC_URL}/admin/citas?cancel=${encodeURIComponent(payload.bookingId)}" style="display:inline-block;background:#FFFFFF;color:#DC2626;border:1px solid #FCA5A5;text-decoration:none;padding:11px 18px;border-radius:999px;font-size:13px;font-weight:600;">Cancelar esta cita</a>
+                </td>
+              </tr>
+            </table>
 
             <p style="margin:28px 0 0;color:#9CA3AF;font-size:11px;line-height:1.6;">
               Este correo se envía automáticamente cuando alguien reserva en beautytashasalon.vercel.app.

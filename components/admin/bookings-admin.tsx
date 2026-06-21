@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Calendar,
@@ -88,7 +88,42 @@ export function BookingsAdmin({
   const [bookings, setBookings] = useState(initial);
   const [editing, setEditing] = useState<Booking | null>(null);
   const [paying, setPaying] = useState<Booking | null>(null);
+  const [cancelPrompt, setCancelPrompt] = useState<Booking | null>(null);
   const [, startTransition] = useTransition();
+
+  // Auto-abrir prompt de cancelación cuando llega ?cancel=<id> desde el email
+  const cancelId = searchParams.get("cancel");
+  const cancelTarget = useMemo(
+    () => (cancelId ? bookings.find((b) => b.id === cancelId) ?? null : null),
+    [cancelId, bookings]
+  );
+
+  useEffect(() => {
+    if (cancelTarget) setCancelPrompt(cancelTarget);
+  }, [cancelTarget]);
+
+  const closeCancelPrompt = () => {
+    setCancelPrompt(null);
+    if (cancelId) {
+      const params = new URLSearchParams(searchParams);
+      params.delete("cancel");
+      router.replace(`/admin/citas${params.toString() ? `?${params.toString()}` : ""}`);
+    }
+  };
+
+  const confirmCancel = (booking: Booking) => {
+    startTransition(async () => {
+      const res = await updateBooking(booking.id, { status: "cancelled" });
+      if (res.error) {
+        alert(res.error);
+        return;
+      }
+      setBookings((b) =>
+        b.map((bk) => (bk.id === booking.id ? { ...bk, status: "cancelled" } : bk))
+      );
+      closeCancelPrompt();
+    });
+  };
 
   const updateFilter = (key: string, value: string | undefined) => {
     const params = new URLSearchParams(searchParams);
@@ -365,7 +400,106 @@ export function BookingsAdmin({
           }}
         />
       )}
+
+      {cancelPrompt && (
+        <CancelConfirmModal
+          booking={cancelPrompt}
+          onCancel={closeCancelPrompt}
+          onConfirm={() => confirmCancel(cancelPrompt)}
+        />
+      )}
+
+      {cancelId && !cancelTarget && (
+        <NotFoundCancelModal onClose={closeCancelPrompt} />
+      )}
     </>
+  );
+}
+
+function CancelConfirmModal({
+  booking,
+  onCancel,
+  onConfirm
+}: {
+  booking: Booking;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const isAlready = booking.status === "cancelled";
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onCancel}
+    >
+      <div
+        className="bg-white rounded-3xl shadow-elevated w-full max-w-md p-6 relative"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
+            <AlertTriangle className="w-5 h-5 text-red-600" />
+          </div>
+          <div>
+            <h3 className="font-serif text-xl font-semibold text-charcoal">
+              {isAlready ? "Cita ya cancelada" : "Cancelar cita"}
+            </h3>
+            <p className="text-sm text-charcoal-muted mt-1">
+              {isAlready
+                ? `Esta cita de ${booking.customer_name} ya está marcada como cancelada.`
+                : `¿Confirmás cancelar la cita de ${booking.customer_name} (${booking.service_name})?`}
+            </p>
+          </div>
+        </div>
+
+        {!isAlready && (
+          <p className="text-xs text-charcoal-muted bg-mauve-50 border border-mauve-100 rounded-xl px-3 py-2 mb-4">
+            Esto también borra el evento del calendario de Google y notifica a la clienta.
+          </p>
+        )}
+
+        <div className="flex gap-2 justify-end">
+          <Button type="button" variant="outline" onClick={onCancel}>
+            {isAlready ? "Cerrar" : "Volver"}
+          </Button>
+          {!isAlready && (
+            <Button
+              type="button"
+              onClick={onConfirm}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Sí, cancelar cita
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NotFoundCancelModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-3xl shadow-elevated w-full max-w-md p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="font-serif text-xl font-semibold text-charcoal mb-2">
+          Cita no encontrada
+        </h3>
+        <p className="text-sm text-charcoal-muted mb-4">
+          El link del correo apunta a una cita que ya no aparece en este filtro.
+          Cambiá el filtro a "Todas" o "Pasadas" para encontrarla.
+        </p>
+        <div className="flex justify-end">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Entendido
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
