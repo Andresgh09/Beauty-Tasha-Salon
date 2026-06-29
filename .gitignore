@@ -10,4 +10,12 @@ dist/
 *.log
 next-env.d.ts
 
-.vercel
+# Credenciales / claves — nunca commitear
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json
+id_rsa*
+id_ed25519*

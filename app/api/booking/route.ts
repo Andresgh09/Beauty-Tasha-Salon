@@ -31,21 +31,53 @@ const BookingSchema = z
     path: ["serviceIds"]
   });
 
-// Naive in-memory rate limit (reemplazar con Upstash en prod si necesario).
+// Rate limit en memoria con ceiling global (defensa en profundidad mientras
+// no haya Upstash Redis configurado — ver CN-003 en cyber-neo report).
+// El Map vive por lambda; en Vercel hay múltiples instancias, por lo que el
+// límite efectivo es N×RATE_LIMIT. Para tráfico real bajo (salón pequeño)
+// es aceptable; para uso intensivo migrar a @upstash/ratelimit.
 const rateLimitMap = new Map<string, { count: number; reset: number }>();
-const RATE_LIMIT = 5;
+let globalCount = 0;
+let globalReset = Date.now() + 60_000;
+const RATE_LIMIT_PER_IP = 5;
+const RATE_LIMIT_GLOBAL = 100; // ceiling absoluto por lambda por minuto
 const RATE_WINDOW = 60_000;
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
+
+  // Ceiling global — protege contra IP spoofing masivo
+  if (now > globalReset) {
+    globalCount = 0;
+    globalReset = now + RATE_WINDOW;
+  }
+  if (globalCount >= RATE_LIMIT_GLOBAL) return false;
+
   const entry = rateLimitMap.get(ip);
   if (!entry || now > entry.reset) {
     rateLimitMap.set(ip, { count: 1, reset: now + RATE_WINDOW });
+    globalCount++;
     return true;
   }
-  if (entry.count >= RATE_LIMIT) return false;
+  if (entry.count >= RATE_LIMIT_PER_IP) return false;
   entry.count++;
+  globalCount++;
   return true;
+}
+
+/** Extrae el Origin del request, con fallback a Referer. */
+function deriveOrigin(req: NextRequest): string | null {
+  const origin = req.headers.get("origin");
+  if (origin) return origin;
+  const referer = req.headers.get("referer");
+  if (referer) {
+    try {
+      return new URL(referer).origin;
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 // Lista blanca de orígenes permitidos para CSRF protection.
@@ -81,16 +113,23 @@ const ALLOWED_ORIGINS = buildAllowedOrigins();
 
 export async function POST(req: NextRequest) {
   try {
-    // CSRF protection: validar Origin
-    const origin = req.headers.get("origin");
-    if (origin && !ALLOWED_ORIGINS.has(origin)) {
+    // CSRF protection: validar Origin (con fallback a Referer).
+    // Rechazar también cuando no hay Origin ni Referer — un POST que cambia
+    // estado siempre debería venir desde una página identificable.
+    const origin = deriveOrigin(req);
+    if (!origin || !ALLOWED_ORIGINS.has(origin)) {
       return NextResponse.json(
         { error: "Origen no permitido" },
         { status: 403 }
       );
     }
 
+    // En Vercel, x-vercel-forwarded-for es de confianza (lo inyecta el edge,
+    // ignora cualquier x-forwarded-for que mande el cliente). En local cae a
+    // x-forwarded-for. Si no hay nada, usar "unknown" y dejar que el ceiling
+    // global haga su trabajo.
     const ip =
+      req.headers.get("x-vercel-forwarded-for") ??
       req.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
       req.headers.get("x-real-ip") ??
       "unknown";

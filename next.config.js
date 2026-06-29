@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Quita el header "X-Powered-By: Next.js" (fingerprinting del stack).
+  poweredByHeader: false,
+  // Activa strict mode (warnings de patrones inseguros en dev).
+  reactStrictMode: true,
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },

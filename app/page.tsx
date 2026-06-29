@@ -109,7 +109,12 @@ export default async function HomePage() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{
+          // Escapa < y caracteres de separador para prevenir XSS si algún
+          // campo de DB contiene </script> u otros bytes maliciosos.
+          __html: JSON.stringify(jsonLd)
+            .replace(/</g, "\\u003c")
+        }}
       />
       <main>
         <Navbar />
