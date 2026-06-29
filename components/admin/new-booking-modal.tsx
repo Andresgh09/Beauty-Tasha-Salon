@@ -200,14 +200,8 @@ export function NewBookingModal({
     !slotsLoading && slots.length > 0 && slots.every((s) => !s.available);
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start sm:items-center justify-center p-4 overflow-y-auto"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-3xl shadow-elevated w-full max-w-2xl p-6 my-8 relative"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start sm:items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-3xl shadow-elevated w-full max-w-2xl p-6 my-8 relative">
         <button
           type="button"
           onClick={onClose}
