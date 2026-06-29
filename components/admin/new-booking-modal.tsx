@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo, useTransition } from "react";
+import { useState, useEffect, useMemo, useTransition, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { X, UserPlus, Search, Calendar as CalendarIcon } from "lucide-react";
+import { X, UserPlus, Search, Calendar as CalendarIcon, Check, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,6 +42,24 @@ export function NewBookingModal({
   const [customerMode, setCustomerMode] = useState<"existing" | "new">("existing");
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerId, setCustomerId] = useState<string | null>(null);
+  const [customerOpen, setCustomerOpen] = useState(false);
+  const customerWrapRef = useRef<HTMLDivElement | null>(null);
+
+  // Cerrar dropdown al click afuera
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (
+        customerWrapRef.current &&
+        !customerWrapRef.current.contains(e.target as Node)
+      ) {
+        setCustomerOpen(false);
+      }
+    }
+    if (customerOpen) {
+      document.addEventListener("mousedown", onClick);
+      return () => document.removeEventListener("mousedown", onClick);
+    }
+  }, [customerOpen]);
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newEmail, setNewEmail] = useState("");
@@ -241,7 +259,7 @@ export function NewBookingModal({
             </div>
 
             {customerMode === "existing" ? (
-              <div>
+              <div ref={customerWrapRef} className="relative">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-charcoal-muted pointer-events-none" />
                   <Input
@@ -249,38 +267,80 @@ export function NewBookingModal({
                     onChange={(e) => {
                       setCustomerQuery(e.target.value);
                       setCustomerId(null);
+                      setCustomerOpen(true);
                     }}
-                    placeholder="Buscar por nombre, teléfono o email..."
-                    className="pl-9"
+                    onFocus={() => setCustomerOpen(true)}
+                    placeholder={
+                      customers.length === 0
+                        ? "No hay clientas todavía"
+                        : `Buscar entre ${customers.length} clientas...`
+                    }
+                    className="pl-9 pr-9"
+                    autoComplete="off"
                   />
-                </div>
-                <div className="mt-2 max-h-44 overflow-y-auto border border-mauve-100 rounded-xl divide-y divide-mauve-50">
-                  {filteredCustomers.length === 0 ? (
-                    <div className="p-3 text-center text-xs text-charcoal-muted">
-                      Sin coincidencias. Cambiá a "Nueva" arriba para agregarla.
+                  <ChevronDown
+                    className={cn(
+                      "absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-charcoal-muted transition-transform pointer-events-none",
+                      customerOpen && "rotate-180"
+                    )}
+                  />
+                  {customerId && (
+                    <div className="absolute inset-y-0 right-9 flex items-center pointer-events-none">
+                      <Check className="w-4 h-4 text-green-600" />
                     </div>
-                  ) : (
-                    filteredCustomers.map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => {
-                          setCustomerId(c.id);
-                          setCustomerQuery(c.name);
-                        }}
-                        className={cn(
-                          "w-full text-left px-3 py-2 hover:bg-mauve-50 transition-colors flex items-baseline justify-between gap-2",
-                          customerId === c.id && "bg-mauve-100"
-                        )}
-                      >
-                        <span className="font-medium text-charcoal truncate">{c.name}</span>
-                        <span className="text-xs text-charcoal-muted whitespace-nowrap">
-                          {c.phone}
-                        </span>
-                      </button>
-                    ))
                   )}
                 </div>
+
+                {customerOpen && customers.length > 0 && (
+                  <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-mauve-200 rounded-xl shadow-elevated max-h-64 overflow-y-auto">
+                    {filteredCustomers.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-charcoal-muted">
+                        Sin coincidencias.
+                        <br />
+                        Cambiá a <strong>"Nueva"</strong> arriba para agregarla.
+                      </div>
+                    ) : (
+                      <>
+                        {!customerQuery && (
+                          <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-charcoal-muted bg-mauve-50/40 border-b border-mauve-100">
+                            Mostrando {filteredCustomers.length} de {customers.length}
+                            {customers.length > filteredCustomers.length && " · escribí para buscar"}
+                          </div>
+                        )}
+                        <ul className="divide-y divide-mauve-50">
+                          {filteredCustomers.map((c) => (
+                            <li key={c.id}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCustomerId(c.id);
+                                  setCustomerQuery(c.name);
+                                  setCustomerOpen(false);
+                                }}
+                                className={cn(
+                                  "w-full text-left px-3 py-2 hover:bg-mauve-50 transition-colors flex items-center justify-between gap-2",
+                                  customerId === c.id && "bg-mauve-100"
+                                )}
+                              >
+                                <div className="min-w-0">
+                                  <div className="font-medium text-sm text-charcoal truncate">
+                                    {c.name}
+                                  </div>
+                                  <div className="text-[11px] text-charcoal-muted truncate">
+                                    {c.email}
+                                  </div>
+                                </div>
+                                <span className="text-xs text-charcoal-muted whitespace-nowrap flex-shrink-0">
+                                  {c.phone}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
