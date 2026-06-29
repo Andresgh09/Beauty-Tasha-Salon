@@ -19,8 +19,11 @@ import {
   Smartphone,
   CreditCard,
   ArrowLeftRight,
-  HelpCircle
+  HelpCircle,
+  Plus
 } from "lucide-react";
+import { NewBookingModal } from "./new-booking-modal";
+import type { Customer, Service } from "@/lib/supabase/types";
 import { format, isSameDay, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -77,11 +80,15 @@ export const PAYMENT_METHOD_META: Record<
 export function BookingsAdmin({
   initial,
   activeFilter,
-  activeStatus
+  activeStatus,
+  customers,
+  services
 }: {
   initial: Booking[];
   activeFilter: BookingFilter;
   activeStatus?: BookingStatus;
+  customers: Customer[];
+  services: Service[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -89,6 +96,7 @@ export function BookingsAdmin({
   const [editing, setEditing] = useState<Booking | null>(null);
   const [paying, setPaying] = useState<Booking | null>(null);
   const [cancelPrompt, setCancelPrompt] = useState<Booking | null>(null);
+  const [creatingNew, setCreatingNew] = useState(false);
   const [, startTransition] = useTransition();
 
   // Auto-abrir prompt de cancelación cuando llega ?cancel=<id> desde el email
@@ -166,6 +174,14 @@ export function BookingsAdmin({
 
   return (
     <>
+      {/* Botón Nueva Cita */}
+      <div className="flex justify-end">
+        <Button onClick={() => setCreatingNew(true)} className="gap-2">
+          <Plus className="w-4 h-4" />
+          Nueva cita
+        </Button>
+      </div>
+
       {/* Filtros */}
       <div className="bg-white rounded-2xl border border-mauve-100 p-4 shadow-card space-y-3">
         <div className="flex flex-wrap gap-2">
@@ -411,6 +427,18 @@ export function BookingsAdmin({
 
       {cancelId && !cancelTarget && (
         <NotFoundCancelModal onClose={closeCancelPrompt} />
+      )}
+
+      {creatingNew && (
+        <NewBookingModal
+          customers={customers}
+          services={services}
+          onClose={() => setCreatingNew(false)}
+          onCreated={() => {
+            setCreatingNew(false);
+            router.refresh();
+          }}
+        />
       )}
     </>
   );

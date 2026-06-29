@@ -10,25 +10,30 @@ export type PublicSlot = {
   available: boolean;
 };
 
+type CandidateSlot = Omit<PublicSlot, "available"> & { periodCloseISO: string };
+
 function buildPeriodSlots(
   day: Date,
   open: string | null,
   close: string | null,
   period: PublicSlot["period"],
   slotMinutes: number
-): Omit<PublicSlot, "available">[] {
+): CandidateSlot[] {
   if (!open || !close) return [];
   const [oh, om = 0] = open.split(":").map(Number);
   const [ch, cm = 0] = close.split(":").map(Number);
 
-  const slots: Omit<PublicSlot, "available">[] = [];
+  const periodCloseISO = buildSalonISO(day, ch, cm);
+
+  const slots: CandidateSlot[] = [];
   let h = oh;
   let m = om;
   while (h < ch || (h === ch && m < cm)) {
     slots.push({
       time: `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`,
       iso: buildSalonISO(day, h, m),
-      period
+      period,
+      periodCloseISO
     });
     m += slotMinutes;
     while (m >= 60) {
@@ -108,6 +113,14 @@ export async function getPublicAvailableSlots(
     const slotEnd = addMinutes(slotStart, durationMinutes);
     const inPast = slotStart < now;
     const conflict = busy.some((b) => slotStart < b.end && slotEnd > b.start);
-    return { ...slot, available: !inPast && !conflict };
+    // El servicio debe terminar antes o justo cuando cierra el período
+    // (mañana/tarde/noche). Sin esto, un servicio de 2h a las 18:00 podría
+    // agendarse aunque el salón cierre 19:00.
+    const overflowsClose = slotEnd > parseISO(slot.periodCloseISO);
+    const { periodCloseISO: _omit, ...publicSlot } = slot;
+    return {
+      ...publicSlot,
+      available: !inPast && !conflict && !overflowsClose
+    };
   });
 }

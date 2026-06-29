@@ -148,6 +148,33 @@ export function DateTimeStep({
             <div className="w-8 h-8 border-2 border-mauve-300 border-t-mauve-700 rounded-full animate-spin mx-auto mb-3" />
             Cargando horarios...
           </div>
+        ) : slots.length === 0 ? (
+          <div className="text-center py-10 text-charcoal-muted">
+            <CalendarIcon className="w-10 h-10 mx-auto mb-3 opacity-40 text-mauve-300" />
+            <p className="font-medium text-charcoal">El salón está cerrado este día.</p>
+            <p className="text-sm mt-1">Probá con otro día.</p>
+          </div>
+        ) : slots.every((s) => !s.available) ? (
+          <div className="text-center py-10">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-amber-50 border border-amber-200 mb-3">
+              <CalendarIcon className="w-5 h-5 text-amber-600" />
+            </div>
+            <p className="font-medium text-charcoal">No hay horarios disponibles para este servicio.</p>
+            <p className="text-sm text-charcoal-muted mt-1 max-w-sm mx-auto">
+              {services.length > 1 ? (
+                <>
+                  Los servicios seleccionados suman <strong>{durationTotal} min</strong> ({(durationTotal / 60).toFixed(1)} h)
+                  y no entran en los horarios libres de este día.
+                  Probá otro día o quitá algún servicio.
+                </>
+              ) : (
+                <>
+                  Este servicio dura <strong>{durationTotal} min</strong> ({(durationTotal / 60).toFixed(1)} h)
+                  y no entra en los horarios libres de este día. Probá con otro día.
+                </>
+              )}
+            </p>
+          </div>
         ) : (
           <div className="space-y-6">
             {(["mañana", "tarde", "noche"] as const).map((period) => {
