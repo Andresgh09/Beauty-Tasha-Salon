@@ -455,14 +455,8 @@ function CancelConfirmModal({
 }) {
   const isAlready = booking.status === "cancelled";
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={onCancel}
-    >
-      <div
-        className="bg-white rounded-3xl shadow-elevated w-full max-w-md p-6 relative"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-elevated w-full max-w-md p-6 relative">
         <div className="flex items-start gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
             <AlertTriangle className="w-5 h-5 text-red-600" />
@@ -506,14 +500,8 @@ function CancelConfirmModal({
 
 function NotFoundCancelModal({ onClose }: { onClose: () => void }) {
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-3xl shadow-elevated w-full max-w-md p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-elevated w-full max-w-md p-6">
         <h3 className="font-serif text-xl font-semibold text-charcoal mb-2">
           Cita no encontrada
         </h3>
