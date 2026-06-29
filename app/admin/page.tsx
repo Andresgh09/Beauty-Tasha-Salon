@@ -11,9 +11,14 @@ import {
   CheckCircle2
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { formatCRC, formatSalonTime, SALON_TZ } from "@/lib/utils";
-import { format, startOfMonth, endOfMonth, addDays } from "date-fns";
-import { es } from "date-fns/locale";
+import {
+  formatCRC,
+  formatSalonTime,
+  SALON_TZ,
+  SALON_TZ_OFFSET,
+  salonDateKey
+} from "@/lib/utils";
+import { startOfMonth, endOfMonth, addDays } from "date-fns";
 
 export const dynamic = "force-dynamic";
 
@@ -22,8 +27,13 @@ async function getStats() {
   const now = new Date();
   const monthStart = startOfMonth(now).toISOString();
   const monthEnd = endOfMonth(now).toISOString();
-  const todayStart = new Date(now.setHours(0, 0, 0, 0)).toISOString();
-  const next7Days = addDays(new Date(), 7).toISOString();
+
+  // "Hoy" en zona Costa Rica (no UTC del server), para evitar
+  // que después de las 6pm CR aparezcan las citas de mañana como "hoy"
+  const todayKey = salonDateKey(now); // YYYY-MM-DD en CR
+  const todayStart = new Date(`${todayKey}T00:00:00${SALON_TZ_OFFSET}`).toISOString();
+  const todayEnd = new Date(`${todayKey}T23:59:59.999${SALON_TZ_OFFSET}`).toISOString();
+  const next7Days = addDays(now, 7).toISOString();
 
   const [
     monthBookings,
@@ -41,7 +51,7 @@ async function getStats() {
       .from("bookings")
       .select("id, customer_name, service_name, starts_at")
       .gte("starts_at", todayStart)
-      .lte("starts_at", addDays(new Date(), 1).toISOString())
+      .lte("starts_at", todayEnd)
       .order("starts_at", { ascending: true }),
     supabase
       .from("bookings")
@@ -119,8 +129,13 @@ export default async function AdminDashboard() {
             <h2 className="font-serif text-xl font-semibold text-charcoal">
               Citas de hoy
             </h2>
-            <p className="text-sm text-charcoal-muted">
-              {format(new Date(), "EEEE d 'de' MMMM", { locale: es })}
+            <p className="text-sm text-charcoal-muted capitalize">
+              {new Intl.DateTimeFormat("es-CR", {
+                timeZone: SALON_TZ,
+                weekday: "long",
+                day: "numeric",
+                month: "long"
+              }).format(new Date())}
             </p>
           </div>
           <Link
