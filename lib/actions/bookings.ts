@@ -7,6 +7,7 @@ import {
   cancelBooking as cancelGoogleEvent,
   createBooking as createGoogleEvent
 } from "@/lib/google-calendar";
+import { SALON_TZ_OFFSET, salonDateKey } from "@/lib/utils";
 import type { Booking, BookingStatus } from "@/lib/supabase/types";
 
 async function requireAuth() {
@@ -112,11 +113,12 @@ export async function updateBooking(
       const newEnd = new Date(
         newStart.getTime() + bk.duration_minutes * 60_000
       );
-      // Buscar overlaps con OTRAS citas activas (excluyendo esta misma)
-      const dayStart = new Date(newStart);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(newStart);
-      dayEnd.setHours(23, 59, 59, 999);
+      // Buscar overlaps con OTRAS citas activas (excluyendo esta misma).
+      // Day window en zona CR — no UTC del server — para que una cita a
+      // las 6pm CR no caiga en el día siguiente.
+      const dayKey = salonDateKey(parsed.data.starts_at);
+      const dayStart = new Date(`${dayKey}T00:00:00${SALON_TZ_OFFSET}`);
+      const dayEnd = new Date(`${dayKey}T23:59:59.999${SALON_TZ_OFFSET}`);
 
       const { data: others } = await supabase
         .from("bookings")

@@ -5,6 +5,7 @@ import { sendNewBookingNotification } from "@/lib/email";
 import { getServiceById } from "@/lib/queries/services";
 import { getPublicAvailableSlots } from "@/lib/queries/availability";
 import { createAdminClient } from "@/lib/supabase/server";
+import { SALON_TZ_OFFSET, salonDateKey } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -193,8 +194,12 @@ export async function POST(req: NextRequest) {
     // - No solapado con blocked_slots
     // - No solapado con bookings existentes
     // - Alineado a la grilla de slots configurada
-    const dateOnly = new Date(startISO);
-    dateOnly.setHours(0, 0, 0, 0);
+    // Construir el día en zona CR (no UTC del server) para que getDay()
+    // y buildSalonISO devuelvan el día correcto. Sin esto, una reserva
+    // a las 6pm CR (= 00:00 UTC del día siguiente) busca slots del día
+    // siguiente y falla con "no existe en la grilla de horarios".
+    const dayKey = salonDateKey(startISO); // "YYYY-MM-DD" en CR
+    const dateOnly = new Date(`${dayKey}T12:00:00${SALON_TZ_OFFSET}`);
     const availableSlots = await getPublicAvailableSlots(
       dateOnly,
       totalDuration
