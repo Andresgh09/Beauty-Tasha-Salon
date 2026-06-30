@@ -228,6 +228,15 @@ export async function POST(req: NextRequest) {
       };
     };
 
+    // Helper para scrubbing de PII en logs (Ley 8968 CR).
+    // Convierte "andrea@gmail.com" → "a***@gmail.com" para diagnóstico
+    // sin exponer dato completo en logs de Vercel.
+    const maskEmail = (e: string): string => {
+      const [user, domain] = e.split("@");
+      if (!domain) return "***";
+      return `${user[0] ?? ""}***@${domain}`;
+    };
+
     // 1) Upsert customer (estrategia INSERT-first)
     // Normalizamos email para coincidir con índice único lower(email)
     const normalizedEmail = customer.email.trim().toLowerCase();
@@ -263,7 +272,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (!existing || existing.length === 0) {
-          console.error("[booking:customer:lookup-empty]", { normalizedEmail });
+          console.error("[booking:customer:lookup-empty]", { email: maskEmail(normalizedEmail) });
           return NextResponse.json(
             { error: "Error guardando cliente. Intenta de nuevo." },
             { status: 500 }
@@ -353,7 +362,7 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (bookError || !booking) {
-      console.error("[booking:insert]", bookError);
+      console.error("[booking:insert]", supabaseErr(bookError));
       return NextResponse.json(
         { error: "Error guardando la reserva" },
         { status: 500 }
@@ -401,7 +410,10 @@ export async function POST(req: NextRequest) {
       message: "Cita confirmada. Te enviamos un correo con los detalles."
     });
   } catch (error) {
-    console.error("[booking]", error);
+    // Extraer solo message — el error original puede contener el payload
+    // que el cliente envió (incluido email y phone).
+    const msg = error instanceof Error ? error.message : "unknown";
+    console.error("[booking]", { message: msg });
     return NextResponse.json(
       { error: "Error procesando la reserva. Intenta de nuevo." },
       { status: 500 }

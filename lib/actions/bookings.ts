@@ -86,6 +86,59 @@ export async function updateBooking(
   if (!parsed.success) return { error: "Datos inválidos" };
   const supabase = await requireAuth();
 
+  // Si se cambia starts_at, revalidar que el slot esté libre + no en el
+  // pasado + dentro de horario. Tasha podría tipear mal y double-bookear
+  // el salón sin notarlo. (CN-006)
+  if (parsed.data.starts_at) {
+    const newStart = new Date(parsed.data.starts_at);
+    if (newStart < new Date()) {
+      return { error: "No se puede mover una cita al pasado." };
+    }
+
+    // Leer la duración + status actual para revalidar
+    const { data: bk } = await supabase
+      .from("bookings")
+      .select("duration_minutes, status")
+      .eq("id", id)
+      .single();
+    if (!bk) return { error: "Cita no encontrada" };
+
+    // Solo revalidar conflictos si la cita queda activa
+    const willBeActive =
+      (parsed.data.status ?? bk.status) !== "cancelled" &&
+      (parsed.data.status ?? bk.status) !== "no_show";
+
+    if (willBeActive) {
+      const newEnd = new Date(
+        newStart.getTime() + bk.duration_minutes * 60_000
+      );
+      // Buscar overlaps con OTRAS citas activas (excluyendo esta misma)
+      const dayStart = new Date(newStart);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(newStart);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      const { data: others } = await supabase
+        .from("bookings")
+        .select("id, starts_at, duration_minutes")
+        .in("status", ["pending", "confirmed", "completed"])
+        .neq("id", id)
+        .gte("starts_at", dayStart.toISOString())
+        .lte("starts_at", dayEnd.toISOString());
+
+      const conflict = (others ?? []).some((o) => {
+        const oStart = new Date(o.starts_at);
+        const oEnd = new Date(oStart.getTime() + o.duration_minutes * 60_000);
+        return newStart < oEnd && newEnd > oStart;
+      });
+      if (conflict) {
+        return {
+          error: "Ya hay otra cita en ese horario. Elegí otra hora."
+        };
+      }
+    }
+  }
+
   // Si estamos cancelando, leemos el google_event_id ANTES del update
   // para poder cancelar el evento en Google Calendar después.
   let googleEventIdToCancel: string | null = null;
