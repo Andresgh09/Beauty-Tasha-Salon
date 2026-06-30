@@ -206,6 +206,16 @@ export async function POST(req: NextRequest) {
     );
     const matchingSlot = availableSlots.find((s) => s.iso === startISO);
     if (!matchingSlot) {
+      // Diagnóstico: cuál fue el ISO recibido, qué día CR resolvimos,
+      // y cuántos slots se generaron. Aparece en Vercel logs.
+      console.warn("[booking:no-grid-match]", {
+        startISO,
+        dayKey,
+        totalDuration,
+        slotsGenerated: availableSlots.length,
+        firstSlot: availableSlots[0]?.iso,
+        lastSlot: availableSlots[availableSlots.length - 1]?.iso
+      });
       return NextResponse.json(
         { error: "Ese horario no existe en la grilla de horarios." },
         { status: 409 }
