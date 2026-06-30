@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { salonRangeBounds, salonDateKey } from "@/lib/utils";
 import type {
   Booking,
   PaymentMethod,
@@ -60,45 +61,16 @@ const EMPTY_CATEGORIES: Record<
   other: { total: 0, count: 0 }
 };
 
-function getRangeBounds(range: FinanceRange): { from: Date; to: Date } | null {
-  const now = new Date();
-  const to = new Date(now);
-  to.setHours(23, 59, 59, 999);
-
-  if (range === "today") {
-    const from = new Date(now);
-    from.setHours(0, 0, 0, 0);
-    return { from, to };
-  }
-  if (range === "week") {
-    const from = new Date(now);
-    from.setDate(from.getDate() - 7);
-    return { from, to };
-  }
-  if (range === "month") {
-    const from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-    return { from, to };
-  }
-  if (range === "year") {
-    const from = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
-    return { from, to };
-  }
-  return null; // "all"
+function getRangeBounds(range: FinanceRange): { from: string; to: string } | null {
+  if (range === "all") return null;
+  // Delegamos al helper TZ-safe (CR). El "to" es ahora — no fin del día —
+  // para no incluir futuro que aún no pasó (los reportes de finanzas
+  // miden cobros realizados).
+  return salonRangeBounds(range);
 }
 
-/** YYYY-MM-DD en zona Costa Rica */
-function crDateKey(iso: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Costa_Rica",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(new Date(iso));
-  const y = parts.find((p) => p.type === "year")?.value ?? "0000";
-  const m = parts.find((p) => p.type === "month")?.value ?? "00";
-  const d = parts.find((p) => p.type === "day")?.value ?? "00";
-  return `${y}-${m}-${d}`;
-}
+// Reemplazado por salonDateKey de @/lib/utils — alias por compatibilidad.
+const crDateKey = salonDateKey;
 
 /**
  * Obtiene estadísticas de finanzas para un rango.
@@ -120,8 +92,8 @@ export async function getFinanceStats(
 
   if (bounds) {
     bookingsQuery = bookingsQuery
-      .gte("paid_at", bounds.from.toISOString())
-      .lte("paid_at", bounds.to.toISOString());
+      .gte("paid_at", bounds.from)
+      .lte("paid_at", bounds.to);
   }
 
   let expensesQuery = supabase
@@ -131,8 +103,8 @@ export async function getFinanceStats(
 
   if (bounds) {
     expensesQuery = expensesQuery
-      .gte("spent_at", bounds.from.toISOString())
-      .lte("spent_at", bounds.to.toISOString());
+      .gte("spent_at", bounds.from)
+      .lte("spent_at", bounds.to);
   }
 
   const [bookingsRes, expensesRes] = await Promise.all([

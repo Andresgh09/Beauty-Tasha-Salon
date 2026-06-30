@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPublicAvailableSlots } from "@/lib/queries/availability";
 import { getServiceById } from "@/lib/queries/services";
+import { salonDayBounds } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +31,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Fecha inválida" }, { status: 400 });
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (date < today) {
+    // "Hoy" en zona CR — sin esto, después de las 6pm CR el server
+    // (UTC) considera mañana como hoy y rechazaba reservas válidas.
+    const todayStartCR = new Date(salonDayBounds(new Date()).start);
+    if (date < todayStartCR) {
       return NextResponse.json({ slots: [] });
     }
 

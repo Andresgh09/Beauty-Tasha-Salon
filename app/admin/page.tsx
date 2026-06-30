@@ -15,8 +15,7 @@ import {
   formatCRC,
   formatSalonTime,
   SALON_TZ,
-  SALON_TZ_OFFSET,
-  salonDateKey
+  salonDayBounds
 } from "@/lib/utils";
 import { startOfMonth, endOfMonth, addDays } from "date-fns";
 
@@ -28,11 +27,8 @@ async function getStats() {
   const monthStart = startOfMonth(now).toISOString();
   const monthEnd = endOfMonth(now).toISOString();
 
-  // "Hoy" en zona Costa Rica (no UTC del server), para evitar
-  // que después de las 6pm CR aparezcan las citas de mañana como "hoy"
-  const todayKey = salonDateKey(now); // YYYY-MM-DD en CR
-  const todayStart = new Date(`${todayKey}T00:00:00${SALON_TZ_OFFSET}`).toISOString();
-  const todayEnd = new Date(`${todayKey}T23:59:59.999${SALON_TZ_OFFSET}`).toISOString();
+  // "Hoy" en zona Costa Rica vía helper TZ-safe.
+  const { start: todayStart, end: todayEnd } = salonDayBounds(now);
   const next7Days = addDays(now, 7).toISOString();
 
   const [

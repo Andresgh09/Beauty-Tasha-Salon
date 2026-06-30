@@ -96,3 +96,80 @@ export function salonDateKey(iso: string | Date): string {
     day: "2-digit"
   }).format(date);
 }
+
+/**
+ * Devuelve el día de la semana (0=domingo … 6=sábado) en zona del salón.
+ * No usar `date.getDay()` directo: en runtimes UTC (Vercel) puede dar
+ * el día equivocado para timestamps cerca de medianoche CR.
+ */
+export function salonDayOfWeek(iso?: string | Date): number {
+  const date = iso
+    ? typeof iso === "string" ? new Date(iso) : iso
+    : new Date();
+  // Intl devuelve nombres en inglés; mapeamos a 0-6
+  const name = new Intl.DateTimeFormat("en-US", {
+    timeZone: SALON_TZ,
+    weekday: "short"
+  }).format(date);
+  const map: Record<string, number> = {
+    Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6
+  };
+  return map[name] ?? 0;
+}
+
+/**
+ * Devuelve los bounds ISO UTC de un día CR (start = 00:00 CR, end = 23:59:59.999 CR).
+ * Útil para queries de DB filtradas por "el día de hoy en el salón".
+ */
+export function salonDayBounds(iso?: string | Date): { start: string; end: string } {
+  const dayKey = salonDateKey(iso ?? new Date());
+  return {
+    start: new Date(`${dayKey}T00:00:00${SALON_TZ_OFFSET}`).toISOString(),
+    end: new Date(`${dayKey}T23:59:59.999${SALON_TZ_OFFSET}`).toISOString()
+  };
+}
+
+/**
+ * Devuelve los bounds ISO UTC del rango: today/week/month/year en zona CR.
+ * El "to" siempre es ahora (no fin del día) para no incluir futuro reciente
+ * que aún no pasó. Usado en queries de finanzas.
+ */
+export function salonRangeBounds(
+  range: "today" | "week" | "month" | "year"
+): { from: string; to: string } {
+  const now = new Date();
+  const todayKey = salonDateKey(now);
+  // mediodía CR del día actual — base segura
+  const today = new Date(`${todayKey}T12:00:00${SALON_TZ_OFFSET}`);
+
+  const to = now.toISOString();
+
+  if (range === "today") {
+    return {
+      from: new Date(`${todayKey}T00:00:00${SALON_TZ_OFFSET}`).toISOString(),
+      to
+    };
+  }
+  if (range === "week") {
+    const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const k = salonDateKey(sevenDaysAgo);
+    return {
+      from: new Date(`${k}T00:00:00${SALON_TZ_OFFSET}`).toISOString(),
+      to
+    };
+  }
+  if (range === "month") {
+    // Primer día del mes CR actual
+    const [y, m] = todayKey.split("-");
+    return {
+      from: new Date(`${y}-${m}-01T00:00:00${SALON_TZ_OFFSET}`).toISOString(),
+      to
+    };
+  }
+  // year
+  const [y] = todayKey.split("-");
+  return {
+    from: new Date(`${y}-01-01T00:00:00${SALON_TZ_OFFSET}`).toISOString(),
+    to
+  };
+}

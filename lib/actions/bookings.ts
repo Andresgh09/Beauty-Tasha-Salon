@@ -7,7 +7,7 @@ import {
   cancelBooking as cancelGoogleEvent,
   createBooking as createGoogleEvent
 } from "@/lib/google-calendar";
-import { SALON_TZ_OFFSET, salonDateKey } from "@/lib/utils";
+import { salonDayBounds } from "@/lib/utils";
 import type { Booking, BookingStatus } from "@/lib/supabase/types";
 
 async function requireAuth() {
@@ -30,26 +30,24 @@ export async function getBookings(
     .order("starts_at", { ascending: filter === "past" ? false : true });
 
   const now = new Date();
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(todayStart);
-  todayEnd.setDate(todayEnd.getDate() + 1);
+  // Bounds en zona CR (no UTC del server) para que el filtro "hoy"
+  // muestre el día tal como lo vive Tasha en el salón.
+  const { start: todayStart, end: todayEnd } = salonDayBounds(now);
+  const nowMs = now.getTime();
 
   if (filter === "today") {
     query = query
-      .gte("starts_at", todayStart.toISOString())
-      .lt("starts_at", todayEnd.toISOString());
+      .gte("starts_at", todayStart)
+      .lte("starts_at", todayEnd);
   } else if (filter === "upcoming") {
     query = query.gte("starts_at", now.toISOString()).limit(50);
   } else if (filter === "week") {
-    const weekEnd = new Date(now);
-    weekEnd.setDate(weekEnd.getDate() + 7);
+    const weekEnd = new Date(nowMs + 7 * 24 * 60 * 60 * 1000);
     query = query
       .gte("starts_at", now.toISOString())
       .lte("starts_at", weekEnd.toISOString());
   } else if (filter === "month") {
-    const monthEnd = new Date(now);
-    monthEnd.setMonth(monthEnd.getMonth() + 1);
+    const monthEnd = new Date(nowMs + 30 * 24 * 60 * 60 * 1000);
     query = query
       .gte("starts_at", now.toISOString())
       .lte("starts_at", monthEnd.toISOString());
@@ -114,19 +112,16 @@ export async function updateBooking(
         newStart.getTime() + bk.duration_minutes * 60_000
       );
       // Buscar overlaps con OTRAS citas activas (excluyendo esta misma).
-      // Day window en zona CR — no UTC del server — para que una cita a
-      // las 6pm CR no caiga en el día siguiente.
-      const dayKey = salonDateKey(parsed.data.starts_at);
-      const dayStart = new Date(`${dayKey}T00:00:00${SALON_TZ_OFFSET}`);
-      const dayEnd = new Date(`${dayKey}T23:59:59.999${SALON_TZ_OFFSET}`);
+      // Day window en zona CR — no UTC del server.
+      const { start: dayStart, end: dayEnd } = salonDayBounds(parsed.data.starts_at);
 
       const { data: others } = await supabase
         .from("bookings")
         .select("id, starts_at, duration_minutes")
         .in("status", ["pending", "confirmed", "completed"])
         .neq("id", id)
-        .gte("starts_at", dayStart.toISOString())
-        .lte("starts_at", dayEnd.toISOString());
+        .gte("starts_at", dayStart)
+        .lte("starts_at", dayEnd);
 
       const conflict = (others ?? []).some((o) => {
         const oStart = new Date(o.starts_at);

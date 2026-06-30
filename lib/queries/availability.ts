@@ -1,6 +1,6 @@
-import { addMinutes, parseISO, startOfDay, endOfDay } from "date-fns";
+import { addMinutes, parseISO } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
-import { buildSalonISO } from "@/lib/utils";
+import { buildSalonISO, salonDayOfWeek, salonDayBounds } from "@/lib/utils";
 import type { BusinessHours, BlockedSlot, Booking } from "@/lib/supabase/types";
 
 export type PublicSlot = {
@@ -53,7 +53,8 @@ export async function getPublicAvailableSlots(
   durationMinutes: number
 ): Promise<PublicSlot[]> {
   const supabase = createClient();
-  const dayOfWeek = date.getDay();
+  // Día de la semana en zona CR — no usar date.getDay() (server-TZ).
+  const dayOfWeek = salonDayOfWeek(date);
 
   // Business hours del día
   const { data: hours } = await supabase
@@ -77,9 +78,8 @@ export async function getPublicAvailableSlots(
 
   if (candidates.length === 0) return [];
 
-  // Bloqueos solapados con el día
-  const dayStart = startOfDay(date).toISOString();
-  const dayEnd = endOfDay(date).toISOString();
+  // Bloqueos solapados con el día CR (no UTC del server).
+  const { start: dayStart, end: dayEnd } = salonDayBounds(date);
   const [{ data: blocks }, { data: bookings }] = await Promise.all([
     supabase
       .from("blocked_slots")
