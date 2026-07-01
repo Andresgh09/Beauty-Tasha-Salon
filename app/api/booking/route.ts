@@ -206,24 +206,13 @@ export async function POST(req: NextRequest) {
     );
     const matchingSlot = availableSlots.find((s) => s.iso === startISO);
     if (!matchingSlot) {
-      // Diagnóstico temporal — se queda hasta resolver el bug TZ
-      const diag = {
-        startISO,
+      console.warn("[booking:no-grid-match]", {
         dayKey,
         totalDuration,
-        slotsGenerated: availableSlots.length,
-        availableCount: availableSlots.filter((s) => s.available).length,
-        firstSlot: availableSlots[0]?.iso ?? null,
-        lastSlot: availableSlots[availableSlots.length - 1]?.iso ?? null,
-        sampleSlots: availableSlots.slice(-5).map((s) => ({
-          iso: s.iso,
-          time: s.time,
-          available: s.available
-        }))
-      };
-      console.warn("[booking:no-grid-match]", diag);
+        slotsGenerated: availableSlots.length
+      });
       return NextResponse.json(
-        { error: "Ese horario no existe en la grilla de horarios.", _diag: diag },
+        { error: "Ese horario no existe en la grilla de horarios." },
         { status: 409 }
       );
     }
