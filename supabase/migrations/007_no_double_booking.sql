@@ -41,6 +41,19 @@ order by a.starts_at;
 create extension if not exists btree_gist;
 
 -- ---------------------------------------------------------------------
+-- PASO 2.5: columna generada ends_at.
+-- No se puede usar (starts_at + interval) directo en el índice porque
+-- Postgres lo marca STABLE (un interval puede tener días/meses que
+-- dependen de la TZ). Usamos aritmética de epoch (segundos absolutos),
+-- que SÍ es IMMUTABLE. La columna se autocalcula, el código no la toca.
+-- ---------------------------------------------------------------------
+alter table bookings
+  add column if not exists ends_at timestamptz
+  generated always as (
+    to_timestamp(extract(epoch from starts_at) + duration_minutes * 60)
+  ) stored;
+
+-- ---------------------------------------------------------------------
 -- PASO 3: el constraint anti-overlap.
 -- Solo aplica a reservas PENDING/CONFIRMED (las citas futuras/activas que
 -- compiten por el tiempo de Tasha). Las completed/cancelled/no_show NO
@@ -53,7 +66,7 @@ create extension if not exists btree_gist;
 alter table bookings
   add constraint bookings_no_overlap
   exclude using gist (
-    tstzrange(starts_at, starts_at + make_interval(mins => duration_minutes)) with &&
+    tstzrange(starts_at, ends_at) with &&
   )
   where (status in ('pending','confirmed'));
 
