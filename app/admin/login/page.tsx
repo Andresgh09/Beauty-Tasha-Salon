@@ -2,6 +2,7 @@
 
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
 import { Eye, EyeOff, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -134,7 +135,13 @@ function LoginForm() {
           </Button>
 
           <p className="text-xs text-center text-charcoal-muted">
-            ¿Olvidaste tu contraseña? Contacta a tu desarrollador.
+            ¿Olvidaste tu contraseña?{" "}
+            <Link
+              href="/admin/forgot-password"
+              className="font-medium text-mauve-700 hover:text-mauve-800"
+            >
+              Recuperala acá
+            </Link>
           </p>
         </form>
       </div>

@@ -9,8 +9,13 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Permitir /admin/login sin sesión
-  if (pathname === "/admin/login") {
+  // Rutas públicas de auth (login + recuperación de contraseña)
+  const PUBLIC_AUTH_PATHS = [
+    "/admin/login",
+    "/admin/forgot-password",
+    "/admin/reset-password"
+  ];
+  if (PUBLIC_AUTH_PATHS.includes(pathname)) {
     return NextResponse.next();
   }
 
