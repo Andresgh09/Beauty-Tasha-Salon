@@ -158,7 +158,13 @@ export async function updateBooking(
   }
 
   const { error } = await supabase.from("bookings").update(updatePayload).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) {
+    // 23P01 = exclusion_violation → el nuevo horario choca con otra cita
+    if ((error as { code?: string }).code === "23P01") {
+      return { error: "Ya hay otra cita en ese horario. Elegí otra hora." };
+    }
+    return { error: error.message };
+  }
 
   // Cancelar evento en Google Calendar (no bloquear si falla)
   if (googleEventIdToCancel) {
@@ -266,7 +272,39 @@ export async function createAdminBooking(
       : services.map((s) => s.name).join(" + ");
   const primary = services[0];
 
-  // 3) Google Calendar event (opcional)
+  // 3) Insert booking PRIMERO — el constraint bookings_no_overlap rechaza
+  // atómicamente cualquier solape con otra reserva activa. Insertar antes
+  // que Google Calendar evita crear un evento fantasma si el horario ya
+  // está ocupado.
+  const { data: booking, error: bErr } = await supabase
+    .from("bookings")
+    .insert({
+      customer_id: customer.id,
+      service_id: primary.id,
+      service_name: combinedName,
+      service_price: totalPrice,
+      customer_name: customer.name,
+      customer_phone: customer.phone,
+      customer_email: customer.email,
+      notes: data.notes ?? null,
+      starts_at: data.startISO,
+      duration_minutes: totalDuration,
+      status: "confirmed",
+      google_event_id: null,
+      final_price: totalPrice
+    })
+    .select("id")
+    .single();
+
+  if (bErr || !booking) {
+    // 23P01 = exclusion_violation → ya hay una cita en ese horario
+    if (bErr?.code === "23P01") {
+      return { error: "Ya hay una cita en ese horario. Elegí otra hora." };
+    }
+    return { error: "Error guardando la cita: " + (bErr?.message ?? "?") };
+  }
+
+  // 4) Google Calendar event (opcional, ya con el slot asegurado)
   let googleEventId: string | null = null;
   if (data.sendInvitation) {
     try {
@@ -287,31 +325,12 @@ export async function createAdminBooking(
     } catch (gErr) {
       console.warn("[createAdminBooking:gcal]", gErr);
     }
-  }
-
-  // 4) Insert booking
-  const { data: booking, error: bErr } = await supabase
-    .from("bookings")
-    .insert({
-      customer_id: customer.id,
-      service_id: primary.id,
-      service_name: combinedName,
-      service_price: totalPrice,
-      customer_name: customer.name,
-      customer_phone: customer.phone,
-      customer_email: customer.email,
-      notes: data.notes ?? null,
-      starts_at: data.startISO,
-      duration_minutes: totalDuration,
-      status: "confirmed",
-      google_event_id: googleEventId,
-      final_price: totalPrice
-    })
-    .select("id")
-    .single();
-
-  if (bErr || !booking) {
-    return { error: "Error guardando la cita: " + (bErr?.message ?? "?") };
+    if (googleEventId) {
+      await supabase
+        .from("bookings")
+        .update({ google_event_id: googleEventId })
+        .eq("id", booking.id);
+    }
   }
 
   // 5) booking_items

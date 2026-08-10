@@ -323,13 +323,54 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2) Crear evento en Google Calendar (opcional)
-    // Si hay múltiples servicios, el título es "Servicio 1 + Servicio 2"
+    // Nombre combinado si hay múltiples servicios: "Servicio 1 + Servicio 2"
     const combinedServiceName =
       validServices.length === 1
         ? primaryService.name
         : validServices.map((s) => s.name).join(" + ");
 
+    // 2) Crear booking en Supabase PRIMERO (antes de Google Calendar).
+    // El constraint bookings_no_overlap rechaza atómicamente cualquier
+    // solape con otra reserva activa → imposible doble reserva aunque dos
+    // clientas envíen al mismo tiempo. Insertar antes que GCal también
+    // evita crear un evento fantasma si el slot ya fue tomado.
+    const { data: booking, error: bookError } = await supabase
+      .from("bookings")
+      .insert({
+        customer_id: customerId,
+        service_id: primaryService.id,
+        service_name: combinedServiceName,
+        service_price: totalPrice,
+        customer_name: customer.name,
+        customer_phone: customer.phone,
+        customer_email: normalizedEmail,
+        notes: customer.notes ?? null,
+        starts_at: startISO,
+        duration_minutes: totalDuration,
+        status: "confirmed",
+        google_event_id: null,
+        final_price: totalPrice
+      })
+      .select("id")
+      .single();
+
+    if (bookError || !booking) {
+      // 23P01 = exclusion_violation → el slot fue tomado por otra reserva
+      // entre el check y este insert (race condition). Error amable.
+      if (bookError?.code === "23P01") {
+        return NextResponse.json(
+          { error: "Ese horario acaba de ser reservado por alguien más. Elegí otro." },
+          { status: 409 }
+        );
+      }
+      console.error("[booking:insert]", supabaseErr(bookError));
+      return NextResponse.json(
+        { error: "Error guardando la reserva" },
+        { status: 500 }
+      );
+    }
+
+    // 3) Crear evento en Google Calendar (opcional, ya con el slot asegurado)
     let googleEventId: string | null = null;
     try {
       const result = await createGoogleEvent({
@@ -350,33 +391,15 @@ export async function POST(req: NextRequest) {
       console.warn("[booking:gcal] No se pudo crear evento:", gErr);
     }
 
-    // 3) Crear booking en Supabase con snapshot del servicio primario
-    const { data: booking, error: bookError } = await supabase
-      .from("bookings")
-      .insert({
-        customer_id: customerId,
-        service_id: primaryService.id,
-        service_name: combinedServiceName,
-        service_price: totalPrice,
-        customer_name: customer.name,
-        customer_phone: customer.phone,
-        customer_email: normalizedEmail,
-        notes: customer.notes ?? null,
-        starts_at: startISO,
-        duration_minutes: totalDuration,
-        status: "confirmed",
-        google_event_id: googleEventId,
-        final_price: totalPrice
-      })
-      .select("id")
-      .single();
-
-    if (bookError || !booking) {
-      console.error("[booking:insert]", supabaseErr(bookError));
-      return NextResponse.json(
-        { error: "Error guardando la reserva" },
-        { status: 500 }
-      );
+    // Guardar el google_event_id en la reserva (no bloquear si falla)
+    if (googleEventId) {
+      const { error: updErr } = await supabase
+        .from("bookings")
+        .update({ google_event_id: googleEventId })
+        .eq("id", booking.id);
+      if (updErr) {
+        console.warn("[booking:gcal-id-update]", supabaseErr(updErr));
+      }
     }
 
     // 4) Crear booking_items (uno por servicio)
