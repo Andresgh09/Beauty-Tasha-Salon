@@ -29,8 +29,8 @@ select
 from bookings a
 join bookings b
   on a.id < b.id
- and a.status in ('pending','confirmed','completed')
- and b.status in ('pending','confirmed','completed')
+ and a.status in ('pending','confirmed')
+ and b.status in ('pending','confirmed')
  and tstzrange(a.starts_at, a.starts_at + make_interval(mins => a.duration_minutes))
      && tstzrange(b.starts_at, b.starts_at + make_interval(mins => b.duration_minutes))
 order by a.starts_at;
@@ -42,8 +42,11 @@ create extension if not exists btree_gist;
 
 -- ---------------------------------------------------------------------
 -- PASO 3: el constraint anti-overlap.
--- Solo aplica a reservas ACTIVAS (pending/confirmed/completed). Las
--- canceladas y no-show liberan el horario y no bloquean.
+-- Solo aplica a reservas PENDING/CONFIRMED (las citas futuras/activas que
+-- compiten por el tiempo de Tasha). Las completed/cancelled/no_show NO
+-- bloquean: las completadas ya pasaron, y cancelled/no_show liberan el
+-- horario. Esto también evita que solapes históricos (bug viejo) impidan
+-- crear el constraint — basta marcar las pasadas como completed/no_show.
 -- Rangos half-open [inicio, fin): una cita 9-10 y otra 10-11 NO solapan
 -- (adyacentes están permitidas), igual que la lógica del front.
 -- ---------------------------------------------------------------------
@@ -52,7 +55,7 @@ alter table bookings
   exclude using gist (
     tstzrange(starts_at, starts_at + make_interval(mins => duration_minutes)) with &&
   )
-  where (status in ('pending','confirmed','completed'));
+  where (status in ('pending','confirmed'));
 
 -- ---------------------------------------------------------------------
 -- PASO 4: verificación — debería listar el constraint recién creado.
