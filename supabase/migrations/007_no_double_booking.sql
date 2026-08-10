@@ -41,17 +41,34 @@ order by a.starts_at;
 create extension if not exists btree_gist;
 
 -- ---------------------------------------------------------------------
--- PASO 2.5: columna generada ends_at.
--- No se puede usar (starts_at + interval) directo en el índice porque
--- Postgres lo marca STABLE (un interval puede tener días/meses que
--- dependen de la TZ). Usamos aritmética de epoch (segundos absolutos),
--- que SÍ es IMMUTABLE. La columna se autocalcula, el código no la toca.
+-- PASO 2.5: columna ends_at (normal) + trigger que la mantiene.
+-- No se puede usar (starts_at + interval) ni extract(epoch..) dentro del
+-- índice: ambas son STABLE (dependen de TZ) y el índice exige IMMUTABLE.
+-- Solución: columna plana poblada por trigger (los triggers SÍ pueden
+-- usar funciones stable). El constraint sobre columnas planas es
+-- immutable. El código de la app no toca ends_at — el trigger lo llena.
 -- ---------------------------------------------------------------------
 alter table bookings
-  add column if not exists ends_at timestamptz
-  generated always as (
-    to_timestamp(extract(epoch from starts_at) + duration_minutes * 60)
-  ) stored;
+  add column if not exists ends_at timestamptz;
+
+-- Backfill de las filas existentes
+update bookings
+set ends_at = starts_at + make_interval(mins => duration_minutes)
+where ends_at is null;
+
+-- Trigger que recalcula ends_at en cada insert/update
+create or replace function set_booking_ends_at()
+returns trigger language plpgsql as $$
+begin
+  new.ends_at := new.starts_at + make_interval(mins => new.duration_minutes);
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_booking_ends_at on bookings;
+create trigger trg_booking_ends_at
+  before insert or update on bookings
+  for each row execute function set_booking_ends_at();
 
 -- ---------------------------------------------------------------------
 -- PASO 3: el constraint anti-overlap.
